@@ -19,6 +19,11 @@ type Config struct {
 
 	JWTSecret string
 	JWTExpiry int // dalam menit
+
+	FrontendURL string
+
+	GeminiAPIKey string
+	GeminiModel  string
 }
 
 func LoadConfig() *Config {
@@ -39,6 +44,11 @@ func LoadConfig() *Config {
 
 		JWTSecret: getEnv("JWT_SECRET", "secret-key-ganti-ini"),
 		JWTExpiry: getEnvInt("JWT_EXPIRY_MINUTES", 60),
+
+		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
+
+		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
+		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-3.6-flash"),
 	}
 }
 

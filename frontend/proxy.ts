@@ -9,9 +9,15 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Jika sudah login dan mengakses root "/", arahkan ke /lab
+  if (request.nextUrl.pathname === "/") {
+    const url = new URL("/lab", request.url);
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/", "/lab/:path*"],
 };

@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type Handler struct {
@@ -16,6 +17,44 @@ func NewHandler(service *Service) *Handler {
 // RegisterRoutes memasang endpoint auth pada mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", h.Login)
+	mux.HandleFunc("POST /api/auth/register", h.Register)
+}
+
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req CreateUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	req.Email = strings.TrimSpace(req.Email)
+	req.Name = strings.TrimSpace(req.Name)
+
+	if req.Email == "" || req.Name == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, "name, email, and password are required")
+		return
+	}
+
+	user, err := h.service.CreateUser(req)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			writeError(w, http.StatusConflict, "email is already registered")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to create user: "+err.Error())
+		return
+	}
+
+	token, err := GenerateToken(h.service.jwtSecret, h.service.jwtExpiryMins, user.UUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate session token")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, LoginResponse{
+		Token: token,
+		User:  *user,
+	})
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {

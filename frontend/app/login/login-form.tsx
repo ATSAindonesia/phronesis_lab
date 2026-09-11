@@ -3,6 +3,32 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import "@material/web/textfield/outlined-text-field.js";
+import "@material/web/button/filled-button.js";
+
+declare global {
+  namespace React.JSX {
+    interface IntrinsicElements {
+      "md-outlined-text-field": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      > & {
+        label?: string;
+        type?: string;
+        value?: string;
+        required?: boolean;
+      };
+      "md-filled-button": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      > & {
+        type?: string;
+        disabled?: boolean;
+      };
+    }
+  }
+}
+
 export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -28,7 +54,7 @@ export default function LoginForm() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/lab");
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -38,52 +64,55 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <label
-          htmlFor="email"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Email
-        </label>
-        <input
-          id="email"
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-5"
+      style={
+        {
+          "--md-sys-color-primary": "#ffffff",
+          "--md-sys-color-on-primary": "#1a1a1a",
+          "--md-sys-color-on-surface": "#ffffff",
+          "--md-sys-color-on-surface-variant": "rgba(255,255,255,0.85)",
+          "--md-sys-color-outline": "rgba(255,255,255,0.6)",
+          "--md-outlined-text-field-input-text-color": "#ffffff",
+          "--md-outlined-text-field-label-text-color": "rgba(255,255,255,0.9)",
+          "--md-outlined-text-field-outline-color": "rgba(255,255,255,0.6)",
+          "--md-outlined-text-field-hover-outline-color": "#ffffff",
+          "--md-outlined-text-field-focus-outline-color": "#ffffff",
+          "--md-outlined-text-field-caret-color": "#ffffff",
+        } as React.CSSProperties
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <md-outlined-text-field
+          label="Email"
           type="email"
-          required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label
-          htmlFor="password"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
           required
+          onInput={(e: React.FormEvent<HTMLElement>) =>
+            setEmail((e.currentTarget as HTMLInputElement).value)
+          }
+        />
+        <md-outlined-text-field
+          label="Password"
+          type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          required
+          onInput={(e: React.FormEvent<HTMLElement>) =>
+            setPassword((e.currentTarget as HTMLInputElement).value)
+          }
         />
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-sm font-medium text-red-200 drop-shadow-sm">
+          {error}
+        </p>
       )}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="mt-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
+      <md-filled-button type="submit" disabled={loading}>
         {loading ? "Logging in..." : "Login"}
-      </button>
+      </md-filled-button>
     </form>
   );
 }

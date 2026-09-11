@@ -5,8 +5,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"lab/internal/auth"
+	"lab/internal/experiments"
 	"lab/internal/shared/config"
 	"lab/internal/shared/database"
 	httpx "lab/internal/shared/http"
@@ -27,14 +29,29 @@ func main() {
 
 	authService := auth.NewService(db, cfg.JWTSecret, cfg.JWTExpiry)
 	authHandler := auth.NewHandler(authService)
+	experimentsHandler := experiments.NewHandler()
 
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
+	experimentsHandler.RegisterRoutes(mux)
 
 	// Contoh endpoint terproteksi
 	mux.Handle("GET /api/me", authHandler.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"user_uuid": auth.UserUUID(r.Context())})
 	})))
+
+	loginURL := strings.TrimRight(cfg.FrontendURL, "/") + "/login"
+
+	// Catch-all: Setiap user yang mengakses link/URL selalu diarahkan langsung ke halaman login
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Jika request adalah ke endpoint API yang tidak ditemukan, berikan 404
+		if strings.HasPrefix(r.URL.Path, "/api") {
+			http.NotFound(w, r)
+			return
+		}
+		// Semua link selain endpoint API diarahkan langsung ke halaman login
+		http.Redirect(w, r, loginURL, http.StatusFound)
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {

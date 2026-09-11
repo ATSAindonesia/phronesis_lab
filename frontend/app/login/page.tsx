@@ -1,13 +1,26 @@
-import LoginForm from "./login-form";
+import { AuthSwitch } from "@/components/ui/auth-switch";
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-full flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-black">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h1 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Login
-        </h1>
-        <LoginForm />
+    <main className="relative flex min-h-screen flex-1 items-center justify-center overflow-hidden px-4 py-8">
+      {/* Video background */}
+      <video
+        className="absolute inset-0 h-full w-full object-cover"
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-hidden="true"
+      >
+        <source src="/video/14239051_1920_1080_25fps.mp4" type="video/mp4" />
+      </video>
+
+      {/* Dark overlay blur */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Modern Auth Switch component */}
+      <div className="relative z-10 w-full flex justify-center">
+        <AuthSwitch defaultMode="signin" onSuccessRedirect="/lab" />
       </div>
     </main>
   );
