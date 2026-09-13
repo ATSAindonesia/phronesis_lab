@@ -4,14 +4,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   AlertCircle,
   RefreshCw,
-  Sparkles,
   ExternalLink,
-  Cpu,
   Globe,
   Code2,
   Terminal,
   FileCode2,
-  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { checkCrossOriginIsolation } from "../lib/webcontainer";
@@ -83,25 +80,25 @@ export default function SandboxPreview({
   }, [onReload]);
 
   return (
-    <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-zinc-950", className)}>
+    <div className={cn("relative flex h-full w-full flex-col overflow-hidden bg-white dark:bg-zinc-900", className)}>
       {/* ─── Address Bar & Dev Controls ─── */}
-      <div className="flex h-10 items-center justify-between border-b border-zinc-800/80 bg-zinc-900/70 px-3.5 backdrop-blur-md shrink-0 z-10">
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800/80 text-[11px] text-zinc-400 font-mono w-full truncate">
-            <Globe className="h-3 w-3 text-emerald-400 shrink-0" />
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-stone-200 bg-stone-50 px-3 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex min-w-0 flex-1 items-center">
+          <div className="flex w-full max-w-md items-center gap-1.5 truncate rounded-md border border-stone-200 bg-white px-2 py-0.5 font-mono text-[11px] text-stone-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+            <Globe className="h-3 w-3 shrink-0 text-stone-400 dark:text-zinc-500" />
             <span className="truncate">
               {previewUrl ? previewUrl.replace(/^https?:\/\//, "") : "localhost:5173 (starting...)"}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 ml-2">
+        <div className="ml-2 flex shrink-0 items-center gap-1">
           {previewUrl && (
             <a
               href={previewUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-200 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               title="Open in new window"
             >
               <ExternalLink className="h-3.5 w-3.5" />
@@ -110,31 +107,31 @@ export default function SandboxPreview({
           <button
             onClick={handleManualReload}
             disabled={isRefreshing}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-200 hover:text-stone-900 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
             title="Reload Preview"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-blue-400")} />
+            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-amber-600 dark:text-amber-400")} />
           </button>
         </div>
       </div>
 
       {/* ─── Main Preview Surface ─── */}
-      <div className="relative flex-1 w-full h-full overflow-hidden bg-zinc-950">
+      <div className="relative h-full w-full flex-1 overflow-hidden bg-white dark:bg-zinc-900">
         {/* Cross-Origin Isolation Warning if headers blocked */}
         {!isIsolated && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center p-6 bg-zinc-950/95 backdrop-blur-sm">
-            <div className="max-w-md w-full rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-zinc-200 shadow-2xl">
-              <div className="flex items-center gap-3 mb-3">
-                <AlertCircle className="h-6 w-6 text-amber-400 shrink-0" />
-                <h3 className="text-sm font-bold text-amber-300">Cross-Origin Isolation Required</h3>
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-stone-100 p-6 dark:bg-zinc-950">
+            <div className="w-full max-w-md rounded-xl border border-amber-600/40 bg-white p-5 text-stone-700 shadow-lg shadow-black/10 dark:border-amber-400/40 dark:bg-zinc-900 dark:text-zinc-300">
+              <div className="mb-2.5 flex items-center gap-2.5">
+                <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <h3 className="text-sm font-medium text-stone-900 dark:text-zinc-50">Cross-Origin Isolation Required</h3>
               </div>
-              <p className="text-xs text-zinc-300 leading-relaxed">
-                WebContainers require <code className="px-1.5 py-0.5 rounded bg-zinc-900 font-mono text-amber-300">Cross-Origin-Opener-Policy: same-origin</code> and <code className="px-1.5 py-0.5 rounded bg-zinc-900 font-mono text-amber-300">Cross-Origin-Embedder-Policy</code> headers to run Node.js in your browser.
+              <p className="text-xs leading-relaxed text-stone-600 dark:text-zinc-400">
+                WebContainers require <code className="rounded border border-stone-200 bg-stone-50 px-1 py-0.5 font-mono text-[11px] dark:border-zinc-800 dark:bg-zinc-950">Cross-Origin-Opener-Policy: same-origin</code> and <code className="rounded border border-stone-200 bg-stone-50 px-1 py-0.5 font-mono text-[11px] dark:border-zinc-800 dark:bg-zinc-950">Cross-Origin-Embedder-Policy</code> headers to run Node.js in your browser.
               </p>
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={() => window.location.reload()}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 text-zinc-950 text-xs font-semibold hover:bg-amber-400 transition"
+                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 cursor-pointer"
                 >
                   Hard Refresh Page
                 </button>
@@ -145,23 +142,21 @@ export default function SandboxPreview({
 
         {/* Booting / Dev Server Starting Indicator */}
         {(isBooting || !previewUrl) && isIsolated && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950 text-center p-6">
-            <div className="relative flex items-center justify-center mb-4">
-              <div className="h-12 w-12 rounded-2xl border border-blue-500/30 bg-blue-500/10 flex items-center justify-center text-blue-400 animate-pulse">
-                <Cpu className="h-6 w-6" />
-              </div>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-stone-50 p-6 text-center dark:bg-zinc-950">
+            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-zinc-700 dark:border-t-amber-400" />
             </div>
-            <h4 className="text-sm font-semibold text-zinc-200">
+            <h4 className="text-sm font-medium text-stone-900 dark:text-zinc-50">
               {bootMessage}
             </h4>
-            <p className="mt-1.5 text-xs text-zinc-500 max-w-xs">
+            <p className="mt-1.5 max-w-xs text-[11px] font-medium text-stone-500 dark:text-zinc-400">
               Initializing WebContainer virtual filesystem and launching Vite development server...
             </p>
 
             {/* Live Terminal Log Snippet */}
             {liveLog && (
-              <div className="mt-4 max-w-sm w-full rounded-xl border border-zinc-800 bg-zinc-900/80 p-2.5 text-left font-mono text-[11px] text-zinc-400 shadow-inner overflow-hidden truncate">
-                <span className="text-blue-400 mr-1">$</span>
+              <div className="mt-4 w-full max-w-sm truncate rounded-md border border-stone-200 bg-white p-2.5 text-left font-mono text-[11px] text-stone-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                <span className="mr-1 text-amber-600 dark:text-amber-400">$</span>
                 <span className="truncate">{liveLog}</span>
               </div>
             )}
@@ -170,7 +165,7 @@ export default function SandboxPreview({
               <button
                 type="button"
                 onClick={onSwitchToTerminal}
-                className="mt-3 text-[11px] text-zinc-500 hover:text-zinc-300 underline underline-offset-4 cursor-pointer"
+                className="mt-3 text-[11px] font-medium text-stone-500 underline underline-offset-4 transition-colors hover:text-stone-900 cursor-pointer dark:text-zinc-400 dark:hover:text-zinc-100"
               >
                 View full terminal logs
               </button>
@@ -190,44 +185,42 @@ export default function SandboxPreview({
         )}
       </div>
 
-      {/* ─── LIVE AGENT ACTIVITY OVERLAY (Bolt-style visual feedback) ─── */}
+      {/* ─── LIVE AGENT ACTIVITY OVERLAY ─── */}
       {isGenerating && (
-        <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-30 max-w-md w-full rounded-2xl border border-blue-500/30 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="absolute bottom-3 left-3 right-3 z-30 w-full max-w-sm rounded-lg border border-stone-200 bg-white p-3 shadow-lg shadow-black/10 dark:border-zinc-800 dark:bg-zinc-900 sm:left-auto">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 shrink-0">
-                <Sparkles className="h-4 w-4 animate-spin" />
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-semibold text-zinc-100 truncate">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-600 dark:bg-amber-400" />
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate text-xs font-medium text-stone-900 dark:text-zinc-50">
                   {generatingStatus?.message || "Agent generating project changes..."}
                 </span>
-                <span className="text-[10px] text-zinc-400 flex items-center gap-1 font-mono truncate">
+                <span className="flex min-w-0 items-center gap-1 truncate font-mono text-[11px] text-stone-500 dark:text-zinc-400">
                   {generatingStatus?.filePath ? (
                     <>
-                      <FileCode2 className="h-3 w-3 text-blue-400 shrink-0" />
-                      <span>{generatingStatus.filePath}</span>
+                      <FileCode2 className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{generatingStatus.filePath}</span>
                       {generatingStatus.linesCount !== undefined && (
-                        <span className="text-zinc-500">({generatingStatus.linesCount} lines)</span>
+                        <span className="shrink-0 text-stone-400 dark:text-zinc-500">({generatingStatus.linesCount} lines)</span>
                       )}
                     </>
                   ) : (
-                    <span>Real-time SSE WebContainer Stream</span>
+                    <span>SSE stream active</span>
                   )}
                 </span>
               </div>
             </div>
 
             {/* Quick Action Switches */}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex shrink-0 items-center gap-1">
               {onSwitchToCode && (
                 <button
                   type="button"
                   onClick={onSwitchToCode}
-                  className="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                  className="flex items-center gap-1 rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 cursor-pointer dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   title="View live code being streamed"
                 >
-                  <Code2 className="h-3 w-3 text-blue-400" />
+                  <Code2 className="h-3 w-3" />
                   <span>Code</span>
                 </button>
               )}
@@ -235,10 +228,10 @@ export default function SandboxPreview({
                 <button
                   type="button"
                   onClick={onSwitchToTerminal}
-                  className="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                  className="flex items-center gap-1 rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 cursor-pointer dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   title="View terminal logs"
                 >
-                  <Terminal className="h-3 w-3 text-emerald-400" />
+                  <Terminal className="h-3 w-3" />
                   <span>Logs</span>
                 </button>
               )}

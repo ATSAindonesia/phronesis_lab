@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Sparkles,
   Eye,
   Code2,
   Monitor,
@@ -21,12 +20,6 @@ import {
   Bot,
   Terminal as TerminalIcon,
   Activity,
-  CheckCircle2,
-  Cpu,
-  ChevronDown,
-  ChevronRight,
-  RefreshCw,
-  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SandboxPreview, { ProjectFile, GeneratingStatus } from "./components/sandbox-preview";
@@ -143,17 +136,17 @@ export default function UiUxPlaygroundPage() {
 
       try {
         setBootMessage("Booting in-browser WebContainer (Node.js/Wasm)...");
-        terminalRef.current?.writeln("\x1b[1;34m[WebContainer] Booting virtual micro-OS...\x1b[0m");
+        terminalRef.current?.writeln("\x1b[1;34m[fs] Booting WebContainer virtual micro-OS...\x1b[0m");
 
         const container = await getWebContainer();
         if (!isMounted) return;
 
-        terminalRef.current?.writeln("\x1b[1;32m[WebContainer] Virtual filesystem mounted.\x1b[0m");
+        terminalRef.current?.writeln("\x1b[1;32m[fs] Virtual filesystem mounted.\x1b[0m");
 
         // 1. Listen for internal dev server port ready BEFORE spawning commands
         container.on("server-ready", (port, url) => {
           if (!isMounted) return;
-          terminalRef.current?.writeln(`\x1b[1;32m[Vite Dev Server] Ready at ${url} (port ${port})\x1b[0m`);
+          terminalRef.current?.writeln(`\x1b[1;32m[vite] Dev server ready at ${url} (port ${port})\x1b[0m`);
           setPreviewUrl(url);
           setIsBooting(false);
         });
@@ -175,7 +168,7 @@ export default function UiUxPlaygroundPage() {
         if (!isMounted) return;
 
         if (installExitCode !== 0) {
-          terminalRef.current?.writeln(`\x1b[1;31m[npm Error] Install exited with code ${installExitCode}\x1b[0m`);
+          terminalRef.current?.writeln(`\x1b[1;31m[err] npm install exited with code ${installExitCode}\x1b[0m`);
           setBootMessage(`npm install failed (exit code ${installExitCode}). Check terminal logs.`);
           setIsBooting(false);
           return;
@@ -185,7 +178,7 @@ export default function UiUxPlaygroundPage() {
 
         // 3. Launch Vite dev server directly via npm run dev
         setBootMessage("Starting Vite development server...");
-        terminalRef.current?.writeln("\x1b[1;36m[Vite] Starting dev server (npm run dev)...\x1b[0m");
+        terminalRef.current?.writeln("\x1b[1;36m[vite] Starting dev server (npm run dev)...\x1b[0m");
 
         const devExitCode = await spawnCommand(
           "npm",
@@ -200,7 +193,7 @@ export default function UiUxPlaygroundPage() {
         if (!isMounted) return;
 
         if (devExitCode !== 0) {
-          terminalRef.current?.writeln(`\x1b[1;31m[Vite Error] Dev server exited with code ${devExitCode}\x1b[0m`);
+          terminalRef.current?.writeln(`\x1b[1;31m[err] Dev server exited with code ${devExitCode}\x1b[0m`);
           setBootMessage(`Vite dev server exited with code ${devExitCode}. Check terminal.`);
           setIsBooting(false);
         }
@@ -209,7 +202,7 @@ export default function UiUxPlaygroundPage() {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : String(err);
         setBootMessage(`WebContainer boot failed: ${msg}`);
-        terminalRef.current?.writeln(`\x1b[1;31m[Boot Error] ${msg}\x1b[0m`);
+        terminalRef.current?.writeln(`\x1b[1;31m[err] Boot failed: ${msg}\x1b[0m`);
         setIsBooting(false);
       }
     }
@@ -236,7 +229,7 @@ export default function UiUxPlaygroundPage() {
     if (!prompt.trim() || isGenerating) return;
 
     if (isBooting || !previewUrl) {
-      terminalRef.current?.writeln("\x1b[1;33m⚡ [Notice] In-browser WebContainer is initializing. Ready in a few seconds...\x1b[0m");
+      terminalRef.current?.writeln("\x1b[1;33m[agent] WebContainer is initializing. Ready in a few seconds...\x1b[0m");
     }
 
     const userPrompt = prompt.trim();
@@ -249,11 +242,11 @@ export default function UiUxPlaygroundPage() {
       message: "Connecting to autonomous coding agent...",
     });
 
-    terminalRef.current?.writeln(`\r\n\x1b[1;35m⚡ [Bolt AI Agent] Prompt: "${userPrompt}"\x1b[0m`);
+    terminalRef.current?.writeln(`\r\n\x1b[1;33m[agent] Prompt: "${userPrompt}"\x1b[0m`);
 
     const parser = new StreamingActionParser({
       onArtifactStart: ({ title }) => {
-        terminalRef.current?.writeln(`\x1b[1;34m📦 Building Artifact: ${title}\x1b[0m`);
+        terminalRef.current?.writeln(`\x1b[1;34m[agent] Building artifact: ${title}\x1b[0m`);
         setGeneratingStatus({
           step: "streaming",
           message: `Building Artifact: ${title}`,
@@ -262,7 +255,7 @@ export default function UiUxPlaygroundPage() {
       onActionStart: (action) => {
         if (action.type === "file" && action.filePath) {
           const path = action.filePath;
-          terminalRef.current?.writeln(`\x1b[1;36m📝 Streaming file: ${path}...\x1b[0m`);
+          terminalRef.current?.writeln(`\x1b[1;36m[fs] Streaming file: ${path}...\x1b[0m`);
 
           setFiles((prev) => ({
             ...prev,
@@ -281,7 +274,7 @@ export default function UiUxPlaygroundPage() {
             linesCount: 1,
           });
         } else if (action.type === "shell") {
-          terminalRef.current?.writeln(`\x1b[1;33m$ Preparing shell command: ${action.content || "..."}\x1b[0m`);
+          terminalRef.current?.writeln(`\x1b[1;33m[shell] Preparing command: ${action.content || "..."}\x1b[0m`);
           setGeneratingStatus({
             step: "streaming",
             message: `Shell: ${action.content || "preparing..."}`,
@@ -330,10 +323,10 @@ export default function UiUxPlaygroundPage() {
           }));
           try {
             await writeContainerFile(path, action.content);
-            terminalRef.current?.writeln(`\x1b[1;32m✓ Applied ${path} to WebContainer (HMR updated)\x1b[0m`);
+            terminalRef.current?.writeln(`\x1b[1;32m[ok] Applied ${path} to WebContainer (HMR updated)\x1b[0m`);
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            terminalRef.current?.writeln(`\x1b[1;31m✗ Failed writing ${path}: ${msg}\x1b[0m`);
+            terminalRef.current?.writeln(`\x1b[1;31m[err] Failed writing ${path}: ${msg}\x1b[0m`);
           }
         } else if (action.type === "shell") {
           const commandLine = action.content.trim();
@@ -346,10 +339,10 @@ export default function UiUxPlaygroundPage() {
               await spawnCommand(cmd, args, (chunk) => {
                 terminalRef.current?.write(chunk);
               });
-              terminalRef.current?.writeln(`\x1b[1;32m✓ Command completed: ${commandLine}\x1b[0m`);
+              terminalRef.current?.writeln(`\x1b[1;32m[ok] Command completed: ${commandLine}\x1b[0m`);
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
-              terminalRef.current?.writeln(`\x1b[1;31m✗ Command failed: ${msg}\x1b[0m`);
+              terminalRef.current?.writeln(`\x1b[1;31m[err] Command failed: ${msg}\x1b[0m`);
             }
           }
         }
@@ -362,7 +355,7 @@ export default function UiUxPlaygroundPage() {
         setAgentThought(thought);
       },
       onArtifactComplete: () => {
-        terminalRef.current?.writeln(`\x1b[1;32m✓ Artifact finished successfully.\x1b[0m`);
+        terminalRef.current?.writeln(`\x1b[1;32m[ok] Artifact finished successfully.\x1b[0m`);
       },
     });
 
@@ -434,7 +427,7 @@ export default function UiUxPlaygroundPage() {
               }
               if (parsed.error) {
                 setErrorMessage(parsed.error);
-                terminalRef.current?.writeln(`\x1b[1;31m[Agent Error] ${parsed.error}\x1b[0m`);
+                terminalRef.current?.writeln(`\x1b[1;31m[err] Agent error: ${parsed.error}\x1b[0m`);
               }
             } catch {
               // Raw text chunk
@@ -450,11 +443,11 @@ export default function UiUxPlaygroundPage() {
         message: "Application updated successfully!",
       });
       setPreviewRefreshKey((k) => k + 1);
-      terminalRef.current?.writeln(`\x1b[1;32m⚡ AI agent generation complete.\x1b[0m\r\n`);
+      terminalRef.current?.writeln(`\x1b[1;32m[ok] Agent generation complete.\x1b[0m\r\n`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
-      terminalRef.current?.writeln(`\x1b[1;31m[Error] ${msg}\x1b[0m`);
+      terminalRef.current?.writeln(`\x1b[1;31m[err] ${msg}\x1b[0m`);
     } finally {
       setIsGenerating(false);
     }
@@ -484,7 +477,7 @@ export default function UiUxPlaygroundPage() {
         (starterFiles.src as { directory: Record<string, { file: { contents: string } }> })
           .directory["App.tsx"].file.contents
       );
-      terminalRef.current?.writeln("\x1b[1;33m[Reset] Workspace reset to starter template.\x1b[0m");
+      terminalRef.current?.writeln("\x1b[1;33m[fs] Workspace reset to starter template.\x1b[0m");
     } catch {
       // Ignore
     }
@@ -499,64 +492,69 @@ export default function UiUxPlaygroundPage() {
 
   const getFileBadge = (fileName: string) => {
     if (fileName.endsWith(".tsx") || fileName.endsWith(".jsx")) {
-      return { label: "TSX", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" };
+      return { label: "TSX", color: "text-stone-600 border-stone-300 dark:text-zinc-400 dark:border-zinc-700" };
     }
     if (fileName.endsWith(".css")) {
-      return { label: "CSS", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" };
+      return { label: "CSS", color: "text-emerald-600 border-emerald-600/40 dark:text-emerald-400 dark:border-emerald-400/40" };
     }
-    return { label: "TS", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" };
+    return { label: "TS", color: "text-amber-600 border-amber-600/40 dark:text-amber-400 dark:border-amber-400/40" };
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950 font-sans">
-      
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-stone-100 font-sans dark:bg-zinc-950 lg:flex-row">
+
       {/* ─── LEFT: AGENT SIDEPANEL ─── */}
-      <aside className="flex h-screen w-80 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all z-30 shadow-xl">
+      <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
         {/* Header */}
-        <div className="flex h-16 items-center gap-3 border-b border-zinc-200/80 px-5 dark:border-zinc-800/80 shrink-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 shadow-md shadow-blue-500/20 text-white">
-            <Bot className="h-5 w-5" />
+        <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-stone-200 px-4 dark:border-zinc-800">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-amber-600/30 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-400">
+            <Bot className="h-4 w-4" />
           </div>
           <div>
-            <div className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <div className="text-sm font-medium text-stone-900 dark:text-zinc-50">
               Agent Control
             </div>
-            <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
-              Bolt.new AI Assistant
+            <div className="text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+              Coding agent workspace
             </div>
           </div>
         </div>
 
         {/* Main Content Area (Suggestions, History, etc.) */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
           {isGenerating ? (
-            <div className="flex flex-col gap-3 rounded-2xl bg-blue-500/10 border border-blue-500/25 p-4 text-xs text-blue-400 animate-pulse shadow-inner">
+            <div className="flex flex-col gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-400 animate-ping" />
-                <span className="font-bold tracking-tight text-sm text-blue-500 dark:text-blue-300">
-                  Agent is Working...
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-600 dark:bg-amber-400" />
+                <span className="text-sm font-medium text-stone-900 dark:text-zinc-50">
+                  Agent is working
                 </span>
               </div>
-              <span className="text-[11px] text-blue-600/80 dark:text-blue-300/80 font-mono leading-relaxed">
+              <span className="font-mono text-[11px] leading-relaxed text-stone-500 dark:text-zinc-400">
                 {generatingStatus.message || "Streaming code changes to the WebContainer runtime..."}
               </span>
+              {generatingStatus.filePath && (
+                <span className="font-mono text-[11px] text-stone-700 dark:text-zinc-300">
+                  {generatingStatus.filePath}
+                  {generatingStatus.linesCount !== undefined && ` (${generatingStatus.linesCount} lines)`}
+                </span>
+              )}
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                <Sparkles className="h-3 w-3" />
-                <span>Try a Suggestion</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+                <Activity className="h-3.5 w-3.5" />
+                <span>Try a suggestion</span>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {promptSuggestions.map((suggestion) => (
                   <button
                     key={suggestion}
                     type="button"
                     disabled={isGenerating}
                     onClick={() => setPrompt(suggestion)}
-                    className="group relative overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-50 text-left text-zinc-600 hover:bg-white hover:text-blue-600 hover:border-blue-200 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-400 dark:hover:border-blue-900/50 px-3.5 py-2.5 text-[11px] font-medium transition-all cursor-pointer leading-relaxed"
+                    className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-stone-600 transition-colors hover:border-amber-600/40 hover:text-stone-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-400/40 dark:hover:text-zinc-100 cursor-pointer"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/0 to-blue-500/0 group-hover:from-blue-500/5 group-hover:to-transparent transition-all duration-500" />
                     {suggestion}
                   </button>
                 ))}
@@ -564,15 +562,23 @@ export default function UiUxPlaygroundPage() {
             </div>
           )}
 
-          {/* Activity / Thoughts Summary could go here */}
+          {/* Last Run summary */}
           {agentActions.length > 0 && !isGenerating && (
-            <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-zinc-200/50 dark:border-zinc-800/50">
-               <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                <span className="flex items-center gap-2"><Activity className="h-3 w-3" /> Last Run</span>
-                <span className="text-zinc-500 dark:text-zinc-400">{agentActions.length} actions</span>
+            <div className="flex flex-col gap-2 border-t border-stone-200 pt-4 dark:border-zinc-800">
+              <div className="flex items-center justify-between text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+                <span className="flex items-center gap-2"><Activity className="h-3.5 w-3.5" /> Last Run</span>
+                <span className="font-mono">{agentActions.length} actions</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {agentActions.map((action, idx) => (
+                  <div key={action.id ? `${action.id}-${idx}` : `action-${idx}`} className="flex items-center justify-between gap-2 font-mono text-[11px] text-stone-600 dark:text-zinc-400">
+                    <span className="truncate">{action.filePath || action.content.split("\n")[0]}</span>
+                    <span className={cn("shrink-0", action.status === "complete" ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-zinc-500")}>{action.type} · {action.status}</span>
+                  </div>
+                ))}
               </div>
               {agentThought && (
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed italic line-clamp-4 hover:line-clamp-none transition-all">
+                <p className="line-clamp-4 text-[11px] leading-relaxed text-stone-500 dark:text-zinc-400 hover:line-clamp-none">
                   "{agentThought.split('\n').pop()}"
                 </p>
               )}
@@ -581,14 +587,14 @@ export default function UiUxPlaygroundPage() {
         </div>
 
         {/* Bottom Input Area */}
-        <div className="p-4 border-t border-zinc-200/80 dark:border-zinc-800/80 shrink-0 bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur-md">
+        <div className="shrink-0 border-t border-stone-200 bg-stone-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
           <form
             onSubmit={handleGenerate}
             className={cn(
-              "flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-300 dark:bg-zinc-950 focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-500/50",
+              "flex flex-col gap-3 rounded-lg border bg-white p-3 transition-colors dark:bg-zinc-900 focus-within:ring-2 focus-within:ring-amber-600/40 focus-within:border-amber-600/60 dark:focus-within:ring-amber-400/40 dark:focus-within:border-amber-400/60",
               isGenerating
-                ? "border-blue-500/60 ring-4 ring-blue-500/10 dark:border-blue-500/50"
-                : "border-zinc-200/90 dark:border-zinc-800/90"
+                ? "border-amber-600/60 dark:border-amber-400/60"
+                : "border-stone-200 dark:border-zinc-800"
             )}
           >
             <textarea
@@ -603,31 +609,31 @@ export default function UiUxPlaygroundPage() {
                   : "Instruct the agent to build or modify UI..."
               }
               rows={4}
-              className="w-full resize-none bg-transparent text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-500 disabled:opacity-60"
+              className="w-full resize-none bg-transparent text-sm leading-relaxed text-stone-900 placeholder:text-stone-400 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-500 disabled:opacity-60"
             />
 
             <div className="flex items-center justify-between pt-1">
-              <div className="text-zinc-400 flex items-center gap-1.5">
-                <Sparkles className={cn("h-4 w-4", isGenerating ? "text-blue-400 animate-spin" : "text-blue-500/70")} />
+              <div className="flex items-center gap-1.5 text-stone-400 dark:text-zinc-500">
+                <Bot className={cn("h-4 w-4", isGenerating ? "text-amber-600 dark:text-amber-400" : "")} />
               </div>
               <button
                 type="submit"
                 disabled={!prompt.trim() || isGenerating || isBooting}
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white transition-all duration-200 cursor-pointer",
+                  "flex h-8 items-center gap-2 rounded-md px-4 text-xs font-medium text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
                   prompt.trim() && !isGenerating && !isBooting
-                    ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-md shadow-blue-500/25 hover:from-blue-700 hover:to-violet-700 hover:shadow-blue-500/40 active:scale-95"
-                    : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed shadow-none"
+                    ? "bg-amber-600 hover:bg-amber-700 active:bg-amber-700 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400"
+                    : "cursor-not-allowed bg-stone-200 text-stone-400 dark:bg-zinc-800 dark:text-zinc-500"
                 )}
               >
                 {isBooting ? (
                   <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-400/40 border-t-zinc-400" />
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" />
                     <span>Booting</span>
                   </>
                 ) : isGenerating ? (
                   <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" />
                     <span>Working</span>
                   </>
                 ) : (
@@ -643,408 +649,408 @@ export default function UiUxPlaygroundPage() {
       </aside>
 
       {/* ─── RIGHT: MAIN WORKSPACE ─── */}
-      <div className="flex flex-1 flex-col overflow-hidden w-full min-w-0 bg-zinc-50 dark:bg-zinc-950">
-        {/* ─── 1. INTEGRATED EXPERIMENT HEADER BAR ─── */}
-      <header className="flex h-16 w-full items-center justify-between border-b border-zinc-200/80 bg-white/90 px-4 sm:px-6 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/90 shrink-0 z-20">
-        {/* Left: Navigation, Title & Live Status */}
-        <div className="flex items-center gap-3.5 min-w-0">
-          <Link
-            href="/lab/experiments"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200/80 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800/80 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors shrink-0"
-            title="Back to Experiments"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-
-          <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
-
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
-                Bolt.new Coding Agent
-              </h1>
-              <span className="hidden xs:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 shrink-0">
-                <Cpu className="h-3 w-3" />
-                WebContainer Wasm
-              </span>
-            </div>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[280px] sm:max-w-md">
-              Active: <span className="font-medium text-zinc-700 dark:text-zinc-300">{currentPromptTitle}</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Center: Viewport & View Mode Toggles */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Viewport size switcher */}
-          <div className="hidden lg:flex items-center rounded-xl border border-zinc-200/80 bg-zinc-100/60 p-0.5 dark:border-zinc-800/80 dark:bg-zinc-900/60">
-            <button
-              type="button"
-              onClick={() => setViewportSize("desktop")}
-              className={cn(
-                "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer",
-                viewportSize === "desktop"
-                  ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-zinc-50 font-semibold"
-                  : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-              )}
-              title="Full Width Desktop View"
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-stone-100 dark:bg-zinc-950">
+        {/* ─── 1. EXPERIMENT HEADER BAR ─── */}
+        <header className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900 lg:h-12 lg:flex-nowrap lg:py-0 sm:px-4 shrink-0">
+          {/* Left: Navigation, Title & Live Status */}
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/lab/experiments"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              title="Back to Experiments"
             >
-              <Monitor className="h-3.5 w-3.5" />
-              <span className="text-[11px]">Full</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewportSize("tablet")}
-              className={cn(
-                "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer",
-                viewportSize === "tablet"
-                  ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-zinc-50 font-semibold"
-                  : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-              )}
-              title="Tablet View (768px)"
-            >
-              <Tablet className="h-3.5 w-3.5" />
-              <span className="text-[11px]">768px</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewportSize("mobile")}
-              className={cn(
-                "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer",
-                viewportSize === "mobile"
-                  ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-zinc-50 font-semibold"
-                  : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-              )}
-              title="Mobile View (375px)"
-            >
-              <Smartphone className="h-3.5 w-3.5" />
-              <span className="text-[11px]">375px</span>
-            </button>
-          </div>
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </Link>
 
-          {/* View Mode Toggle: Preview vs Code vs Terminal / Activity */}
-          <div className="flex items-center rounded-xl border border-zinc-200/80 bg-zinc-100/60 p-0.5 dark:border-zinc-800/80 dark:bg-zinc-900/60 shadow-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode("preview")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer",
-                viewMode === "preview"
-                  ? "bg-white text-blue-600 shadow-xs dark:bg-zinc-800 dark:text-blue-400"
-                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-              )}
-            >
-              <Eye className="h-3.5 w-3.5" />
-              <span>Preview</span>
-            </button>
+            <div className="hidden h-5 w-px bg-stone-200 dark:bg-zinc-800 sm:block" />
 
-            <button
-              type="button"
-              onClick={() => setViewMode("code")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer",
-                viewMode === "code"
-                  ? "bg-white text-blue-600 shadow-xs dark:bg-zinc-800 dark:text-blue-400"
-                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-              )}
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              <span>Code</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setViewMode("activity")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer relative",
-                viewMode === "activity"
-                  ? "bg-white text-blue-600 shadow-xs dark:bg-zinc-800 dark:text-blue-400"
-                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-              )}
-            >
-              <TerminalIcon className="h-3.5 w-3.5" />
-              <span>Terminal & Log</span>
-              {agentActions.length > 0 && (
-                <span className="ml-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[10px] px-1.5 py-0.2 font-mono font-bold">
-                  {agentActions.length}
+            <div className="flex min-w-0 flex-col">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-sm font-medium text-stone-900 dark:text-zinc-50">
+                  Coding Agent Workspace
+                </h1>
+                <span className="hidden shrink-0 items-center gap-1 rounded-md border border-stone-200 px-1.5 py-0.5 font-mono text-[11px] font-medium text-stone-500 dark:border-zinc-700 dark:text-zinc-400 sm:inline-flex">
+                  WebContainer Wasm
                 </span>
-              )}
-            </button>
+              </div>
+              <p className="truncate max-w-[280px] text-[11px] text-stone-500 dark:text-zinc-400 sm:max-w-md">
+                Active: <span className="font-medium text-stone-700 dark:text-zinc-300">{currentPromptTitle}</span>
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Right: Actions & User Menu */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="flex items-center gap-1.5 rounded-xl border border-zinc-200/80 bg-zinc-50 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800/80 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer shadow-xs"
-            title="Reset to default project"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
+          {/* Center: Viewport & View Mode Toggles */}
+          <div className="flex items-center gap-2">
+            {/* Viewport size switcher */}
+            <div className="hidden items-center gap-0.5 rounded-md border border-stone-200 bg-stone-100 p-0.5 dark:border-zinc-800 dark:bg-zinc-950 lg:flex">
+              <button
+                type="button"
+                onClick={() => setViewportSize("desktop")}
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  viewportSize === "desktop"
+                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+                title="Full Width Desktop View"
+              >
+                <Monitor className="h-3.5 w-3.5" />
+                <span className="font-mono">Full</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewportSize("tablet")}
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  viewportSize === "tablet"
+                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+                title="Tablet View (768px)"
+              >
+                <Tablet className="h-3.5 w-3.5" />
+                <span className="font-mono">768 px</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewportSize("mobile")}
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  viewportSize === "mobile"
+                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+                title="Mobile View (375px)"
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                <span className="font-mono">375 px</span>
+              </button>
+            </div>
 
-          <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800" />
+            {/* View Mode Toggle: Preview vs Code vs Terminal / Activity */}
+            <div className="flex items-center gap-0.5 rounded-md border border-stone-200 bg-stone-100 p-0.5 dark:border-zinc-800 dark:bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => setViewMode("preview")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  viewMode === "preview"
+                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>Preview</span>
+              </button>
 
-          <LogoutButton />
-        </div>
-      </header>
+              <button
+                type="button"
+                onClick={() => setViewMode("code")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  viewMode === "code"
+                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                <span>Code</span>
+              </button>
 
-      {/* ─── 2. MAIN EXPERIMENT WORKSPACE ─── */}
-      <div className="flex flex-1 flex-col overflow-hidden w-full min-h-0 relative">
-        {/* Project Files Navigation Bar */}
-        <div className="flex h-10 items-center justify-between border-b border-zinc-200/80 bg-zinc-100/70 px-4 dark:border-zinc-800/80 dark:bg-zinc-900/60 shrink-0">
-          {/* File Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar touch-pan-x flex-nowrap pr-2">
-            <span className="hidden sm:flex items-center gap-1 pr-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 shrink-0">
-              <FolderTree className="h-3 w-3" />
-              VFS:
-            </span>
-            {Object.keys(files).map((fileName) => {
-              const isSelected = activeFileName === fileName;
-              const isModified = recentModifiedFiles.includes(fileName);
-              const badge = getFileBadge(fileName);
-              return (
-                <button
-                  key={fileName}
-                  type="button"
-                  onClick={() => {
-                    setActiveFileName(fileName);
-                    if (viewMode === "activity") setViewMode("code");
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer whitespace-nowrap shrink-0",
-                    isSelected
-                      ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-zinc-50 font-semibold ring-1 ring-zinc-200/80 dark:ring-zinc-700/80"
-                      : "text-zinc-500 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
-                  )}
-                >
-                  <FileCode2 className={cn("h-3.5 w-3.5", isSelected ? "text-blue-500" : "text-zinc-400")} />
-                  <span>{fileName}</span>
-                  {isModified && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" title="Updated by Agent" />
-                  )}
-                  <span className={cn("text-[9px] font-semibold px-1 py-0.2 rounded border ml-0.5", badge.color)}>
-                    {badge.label}
+              <button
+                type="button"
+                onClick={() => setViewMode("activity")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  viewMode === "activity"
+                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+              >
+                <TerminalIcon className="h-3.5 w-3.5" />
+                <span>Terminal</span>
+                {agentActions.length > 0 && (
+                  <span className="rounded-md border border-stone-300 px-1 font-mono text-[10px] text-stone-500 dark:border-zinc-700 dark:text-zinc-400">
+                    {agentActions.length}
                   </span>
-                </button>
-              );
-            })}
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Action on file content */}
-          {viewMode === "code" && (
+          {/* Right: Actions & User Menu */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleCopyCode}
-              className="flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white/80 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-800/80 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors cursor-pointer shrink-0 ml-2"
+              onClick={handleReset}
+              className="flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+              title="Reset to default project"
             >
-              {copied ? (
-                <>
-                  <Check className="h-3 w-3 text-emerald-500" />
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3" />
-                  <span className="hidden xs:inline">Copy Code</span>
-                </>
-              )}
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Reset</span>
             </button>
-          )}
-        </div>
 
-        {/* Workspace Display Area */}
-        <div className="flex flex-1 items-center justify-center overflow-hidden w-full h-full min-h-0 bg-zinc-200/30 dark:bg-black/30">
-          {viewMode === "preview" ? (
-            /* Live WebContainer Preview */
-            <div
-              className={cn(
-                "h-full w-full transition-all duration-300 overflow-hidden",
-                viewportSize === "mobile" && "max-w-[375px] mx-auto border-x border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xl",
-                viewportSize === "tablet" && "max-w-[768px] mx-auto border-x border-zinc-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xl",
-                viewportSize === "desktop" && "w-full bg-transparent"
-              )}
-            >
-              <SandboxPreview
-                files={files}
-                className="h-full w-full"
-                keyTrigger={previewRefreshKey}
-                generatingStatus={generatingStatus}
-                previewUrl={previewUrl}
-                isBooting={isBooting}
-                bootMessage={bootMessage}
-                liveLog={liveLog}
-                isGenerating={isGenerating}
-                onReload={() => {
-                  terminalRef.current?.writeln("\x1b[1;36m[Preview] Manual preview reload triggered.\x1b[0m");
-                }}
-                onSwitchToTerminal={() => {
-                  setViewMode("activity");
-                  setActivitySubTab("terminal");
-                }}
-                onSwitchToCode={() => setViewMode("code")}
-              />
+            <div className="h-5 w-px bg-stone-200 dark:bg-zinc-800" />
+
+            <LogoutButton />
+          </div>
+        </header>
+
+        {/* ─── 2. MAIN EXPERIMENT WORKSPACE ─── */}
+        <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+          {/* Project Files Navigation Bar */}
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-900">
+            {/* File Tabs */}
+            <div className="flex flex-nowrap items-center gap-1 overflow-x-auto pr-2">
+              <span className="flex shrink-0 items-center gap-1 pr-1.5 text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+                <FolderTree className="h-3.5 w-3.5" />
+                <span className="font-mono">VFS</span>
+              </span>
+              {Object.keys(files).map((fileName) => {
+                const isSelected = activeFileName === fileName;
+                const isModified = recentModifiedFiles.includes(fileName);
+                const badge = getFileBadge(fileName);
+                return (
+                  <button
+                    key={fileName}
+                    type="button"
+                    onClick={() => {
+                      setActiveFileName(fileName);
+                      if (viewMode === "activity") setViewMode("code");
+                    }}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                      isSelected
+                        ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        : "text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    )}
+                  >
+                    <FileCode2 className={cn("h-3.5 w-3.5", isSelected ? "text-amber-400" : "text-stone-400 dark:text-zinc-500")} />
+                    <span className="font-mono">{fileName}</span>
+                    {isModified && (
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600 dark:bg-amber-400" title="Updated by Agent" />
+                    )}
+                    <span className={cn("rounded border px-1 font-mono text-[10px]", badge.color)}>
+                      {badge.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          ) : viewMode === "code" ? (
-            /* Code Editor with Line Numbers */
-            <div className="relative flex h-full w-full overflow-hidden bg-zinc-950">
-              <div
-                ref={lineNumbersRef}
-                className="flex flex-col py-4 pl-3 pr-2 text-right font-mono text-xs select-none text-zinc-600 dark:text-zinc-600 bg-zinc-950 border-r border-zinc-850 shrink-0 overflow-hidden"
-                style={{ width: "3.5rem" }}
+
+            {/* Action on file content */}
+            {viewMode === "code" && (
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="ml-2 flex shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
               >
-                {contentLines.map((_, i) => (
-                  <div key={i} className="h-5 leading-5 text-[11px]">
-                    {i + 1}
-                  </div>
-                ))}
-              </div>
-
-              <textarea
-                readOnly
-                value={activeFile?.content || ""}
-                onScroll={handleEditorScroll}
-                spellCheck={false}
-                className="h-full w-full resize-none bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-200 focus:outline-none selection:bg-blue-600/30 selection:text-white overflow-auto whitespace-pre"
-              />
-            </div>
-          ) : (
-            /* Terminal & Agent Activity Split View */
-            <div className="flex h-full w-full flex-col bg-zinc-950 overflow-hidden">
-              {/* Activity Subtabs */}
-              <div className="flex h-10 items-center justify-between border-b border-zinc-800/80 bg-zinc-900/60 px-4 shrink-0">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActivitySubTab("terminal")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer",
-                      activitySubTab === "terminal"
-                        ? "bg-zinc-800 text-zinc-100 font-semibold"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    )}
-                  >
-                    <TerminalIcon className="h-3.5 w-3.5 text-blue-400" />
-                    <span>Interactive Terminal</span>
-                  </button>
-                  <button
-                    onClick={() => setActivitySubTab("actions")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer",
-                      activitySubTab === "actions"
-                        ? "bg-zinc-800 text-zinc-100 font-semibold"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    )}
-                  >
-                    <Activity className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Agent Actions ({agentActions.length})</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Subtab Content */}
-              <div className="flex-1 w-full overflow-hidden p-3">
-                {activitySubTab === "terminal" ? (
-                  <TerminalView ref={terminalRef} className="h-full w-full" />
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">Copied</span>
+                  </>
                 ) : (
-                  <div className="h-full w-full overflow-y-auto space-y-3 pr-2">
-                    {/* Agent Thinking Card */}
-                    {agentThought && (
-                      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-sm">
-                        <div className="flex items-center gap-2 mb-2 text-xs font-bold text-zinc-300">
-                          <Bot className="h-4 w-4 text-blue-400" />
-                          <span>Agent Strategy & Thoughts</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">
-                          {agentThought}
-                        </p>
-                      </div>
-                    )}
+                  <>
+                    <Copy className="h-3 w-3" />
+                    <span className="hidden sm:inline">Copy Code</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
 
-                    {/* Action Items List */}
-                    {agentActions.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
-                        <Activity className="h-8 w-8 mb-2 opacity-40" />
-                        <p className="text-xs">No agent actions recorded yet. Submit a prompt to start.</p>
-                      </div>
-                    ) : (
-                      agentActions.map((action, idx) => {
-                        const isExpanded = expandedActionIndex === idx;
-                        const uniqueKey = action.id ? `${action.id}-${idx}` : `action-${idx}`;
-                        return (
-                          <div
-                            key={uniqueKey}
-                            className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 transition"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
+          {/* Workspace Display Area */}
+          <div className="flex min-h-0 w-full flex-1 items-stretch justify-center overflow-hidden bg-stone-200/50 dark:bg-zinc-950">
+            {viewMode === "preview" ? (
+              /* Live WebContainer Preview */
+              <div
+                className={cn(
+                  "h-full w-full overflow-hidden",
+                  viewportSize === "mobile" && "mx-auto max-w-[375px] border-x border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900",
+                  viewportSize === "tablet" && "mx-auto max-w-[768px] border-x border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900",
+                  viewportSize === "desktop" && "w-full"
+                )}
+              >
+                <SandboxPreview
+                  files={files}
+                  className="h-full w-full"
+                  keyTrigger={previewRefreshKey}
+                  generatingStatus={generatingStatus}
+                  previewUrl={previewUrl}
+                  isBooting={isBooting}
+                  bootMessage={bootMessage}
+                  liveLog={liveLog}
+                  isGenerating={isGenerating}
+                  onReload={() => {
+                    terminalRef.current?.writeln("\x1b[1;36m[vite] Manual preview reload triggered.\x1b[0m");
+                  }}
+                  onSwitchToTerminal={() => {
+                    setViewMode("activity");
+                    setActivitySubTab("terminal");
+                  }}
+                  onSwitchToCode={() => setViewMode("code")}
+                />
+              </div>
+            ) : viewMode === "code" ? (
+              /* Code Editor with Line Numbers */
+              <div className="relative flex h-full w-full overflow-hidden bg-zinc-950">
+                <div
+                  ref={lineNumbersRef}
+                  className="flex shrink-0 select-none flex-col overflow-hidden border-r border-zinc-800 bg-zinc-950 py-3 pl-3 pr-2 text-right font-mono text-[12px] leading-[18px] text-zinc-600"
+                  style={{ width: "3.5rem" }}
+                >
+                  {contentLines.map((_, i) => (
+                    <div key={i} className="h-[18px] leading-[18px]">
+                      {i + 1}
+                    </div>
+                  ))}
+                </div>
+
+                <textarea
+                  readOnly
+                  value={activeFile?.content || ""}
+                  onScroll={handleEditorScroll}
+                  spellCheck={false}
+                  className="h-full w-full resize-none overflow-auto whitespace-pre bg-zinc-950 py-3 px-4 font-mono text-[12px] leading-[18px] text-zinc-200 selection:bg-amber-600/30 focus:outline-none"
+                />
+              </div>
+            ) : (
+              /* Terminal & Agent Activity Split View */
+              <div className="flex h-full w-full flex-col overflow-hidden bg-zinc-950">
+                {/* Activity Subtabs */}
+                <div className="flex h-9 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900 px-3">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setActivitySubTab("terminal")}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                        activitySubTab === "terminal"
+                          ? "bg-zinc-100 text-zinc-900"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      )}
+                    >
+                      <TerminalIcon className="h-3.5 w-3.5" />
+                      <span>Terminal</span>
+                    </button>
+                    <button
+                      onClick={() => setActivitySubTab("actions")}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                        activitySubTab === "actions"
+                          ? "bg-zinc-100 text-zinc-900"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      )}
+                    >
+                      <Activity className="h-3.5 w-3.5" />
+                      <span>Agent Actions ({agentActions.length})</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Subtab Content */}
+                <div className="w-full flex-1 overflow-hidden p-3">
+                  {activitySubTab === "terminal" ? (
+                    <TerminalView ref={terminalRef} className="h-full w-full" />
+                  ) : (
+                    <div className="h-full w-full space-y-2.5 overflow-y-auto pr-1">
+                      {/* Agent Thinking Card */}
+                      {agentThought && (
+                        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3.5">
+                          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-200">
+                            <Bot className="h-4 w-4 text-amber-400" />
+                            <span>Agent Strategy & Thoughts</span>
+                          </div>
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap text-zinc-400">
+                            {agentThought}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Action Items List */}
+                      {agentActions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
+                          <Activity className="mb-2 h-8 w-8 opacity-40" />
+                          <p className="text-xs">No agent actions recorded yet. Submit a prompt to start.</p>
+                        </div>
+                      ) : (
+                        agentActions.map((action, idx) => {
+                          const isExpanded = expandedActionIndex === idx;
+                          const uniqueKey = action.id ? `${action.id}-${idx}` : `action-${idx}`;
+                          return (
+                            <div
+                              key={uniqueKey}
+                              className={cn(
+                                "rounded-lg border border-zinc-800 bg-zinc-900 p-3",
+                                isExpanded && "ring-1 ring-amber-400/40"
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]",
+                                      action.type === "file"
+                                        ? "border-amber-400/40 text-amber-400"
+                                        : "border-zinc-700 text-zinc-400"
+                                    )}
+                                  >
+                                    {action.type}
+                                  </span>
+                                  {action.filePath && (
+                                    <button
+                                      onClick={() => handleSwitchToFile(action.filePath!)}
+                                      className="truncate font-mono text-xs text-zinc-300 hover:text-amber-400 hover:underline cursor-pointer"
+                                    >
+                                      {action.filePath}
+                                    </button>
+                                  )}
+                                </div>
                                 <span
                                   className={cn(
-                                    "px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase",
-                                    action.type === "file"
-                                      ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-                                      : "bg-purple-500/15 text-purple-400 border border-purple-500/30"
+                                    "shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]",
+                                    action.status === "complete"
+                                      ? "border-emerald-400/40 text-emerald-400"
+                                      : "border-amber-400/40 text-amber-400"
                                   )}
                                 >
-                                  {action.type}
+                                  {action.status}
                                 </span>
-                                {action.filePath && (
-                                  <button
-                                    onClick={() => handleSwitchToFile(action.filePath!)}
-                                    className="font-mono text-xs text-blue-400 hover:underline"
-                                  >
-                                    {action.filePath}
-                                  </button>
-                                )}
                               </div>
-                              <span
-                                className={cn(
-                                  "text-[10px] font-semibold px-1.5 py-0.5 rounded",
-                                  action.status === "complete"
-                                    ? "text-emerald-400 bg-emerald-500/10"
-                                    : "text-amber-400 bg-amber-500/10"
-                                )}
-                              >
-                                {action.status}
-                              </span>
+
+                              {action.content && action.type === "shell" && (
+                                <div className="mt-2 rounded border border-zinc-800 bg-zinc-950 p-2 font-mono text-xs text-zinc-300">
+                                  $ {action.content}
+                                </div>
+                              )}
                             </div>
-
-                            {action.content && action.type === "shell" && (
-                              <div className="mt-2 text-xs font-mono text-purple-300 bg-black/40 p-2 rounded border border-purple-900/30">
-                                $ {action.content}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Error Alert */}
-      {errorMessage && (
-        <div className="flex items-center justify-between border-t border-rose-500/25 bg-rose-500/10 px-4 py-2 text-xs font-medium text-rose-300 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
-            <span>{errorMessage}</span>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="rounded-lg p-1 text-rose-400 hover:bg-rose-500/20 hover:text-rose-200 transition-colors cursor-pointer"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
         </div>
-      )}
 
-      {/* ─── BOTTOM PROMPT INPUT REMOVED - MOVED TO SIDEPANEL ─── */}
+        {/* Error Alert */}
+        {errorMessage && (
+          <div className="flex shrink-0 items-center justify-between border-t border-rose-600/40 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-600 dark:border-rose-400/40 dark:bg-rose-950/50 dark:text-rose-400">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMessage(null)}
+              className="rounded-md p-1 transition-colors hover:bg-rose-100 cursor-pointer dark:hover:bg-rose-900/50"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

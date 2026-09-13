@@ -101,13 +101,13 @@ export default defineConfig({
         margin: 0;
         padding: 0;
         min-height: 100%;
-        background-color: #09090b;
-        color: #f4f4f5;
+        background-color: #fafaf9;
+        color: #1c1917;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
     </style>
   </head>
-  <body class="bg-zinc-950 text-zinc-100 min-h-screen antialiased">
+  <body class="bg-stone-50 text-stone-900 min-h-screen antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
@@ -145,24 +145,24 @@ body {
       "App.tsx": {
         file: {
           contents: `import React from 'react';
-import { Sparkles, Terminal, Cpu } from 'lucide-react';
+import { Terminal, Zap } from 'lucide-react';
 
 export default function App() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-zinc-100 p-8 font-sans">
-      <div className="max-w-md w-full rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-8 shadow-2xl backdrop-blur-xl text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
-          <Sparkles className="h-6 w-6" />
+    <div className="flex min-h-screen flex-col items-center justify-center bg-stone-50 p-8 font-sans text-stone-900">
+      <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg border border-amber-600/30 bg-amber-500/10 text-amber-600">
+          <Zap className="h-5 w-5" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-300 to-violet-400 bg-clip-text text-transparent">
-          Bolt.new Playground Ready
+        <h1 className="text-xl font-semibold tracking-tight text-stone-900">
+          WebContainer sandbox ready
         </h1>
-        <p className="mt-2 text-xs text-zinc-400 leading-relaxed">
-          Powered by live WebContainer, Vite HMR, and real-time streaming AI coding actions.
+        <p className="mt-2 text-sm leading-relaxed text-stone-500">
+          Edit this file to see live Vite HMR. Describe a change in the prompt panel and the agent will stream updates here.
         </p>
-        <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-zinc-500">
-          <span className="flex items-center gap-1"><Cpu className="h-3.5 w-3.5 text-emerald-400" /> Wasm Node.js</span>
-          <span className="flex items-center gap-1"><Terminal className="h-3.5 w-3.5 text-blue-400" /> Vite HMR</span>
+        <div className="mt-6 flex items-center justify-center gap-4 text-xs text-stone-400">
+          <span className="flex items-center gap-1.5"><Terminal className="h-3.5 w-3.5" /> Vite + React 19</span>
+          <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Node.js in browser</span>
         </div>
       </div>
     </div>
