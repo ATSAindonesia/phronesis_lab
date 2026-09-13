@@ -38,6 +38,10 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [activeItem, setActiveItem] = useState("/lab");
 
+  if (pathname === "/lab/experiments/ui-ux") {
+    return null;
+  }
+
   return (
     <aside className="relative flex h-screen w-64 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all">
       {/* Brand Header */}

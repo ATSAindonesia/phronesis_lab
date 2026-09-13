@@ -13,6 +13,7 @@ func NewHandler() *Handler {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/experiments/generate", h.Generate)
+	mux.HandleFunc("POST /api/experiments/generate/stream", h.GenerateStream)
 	mux.HandleFunc("GET /api/experiments/files", h.GetFiles)
 }
 
@@ -26,6 +27,18 @@ func (h *Handler) GetFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) GenerateStream(w http.ResponseWriter, r *http.Request) {
+	var req GenerateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	_ = StreamAgentResponse(r.Context(), req.Prompt, req.Files, w)
+}
+
 func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 	var req GenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -35,17 +48,6 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentResult := RunAgentLoop(req.Prompt, req.Files)
-
-	res := GenerateResponse{
-		Success: true,
-		Prompt:  req.Prompt,
-		Thought: agentResult.Thought,
-		Actions: agentResult.Actions,
-		Files:   agentResult.Files,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(res)
+	_ = StreamAgentResponse(r.Context(), req.Prompt, req.Files, w)
 }
+

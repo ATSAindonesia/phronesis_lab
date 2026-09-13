@@ -1,80 +1,69 @@
 package experiments
 
 import (
-	"strings"
+	"encoding/json"
 	"testing"
 )
 
-func TestVerifyWorkspaceBuild_Success(t *testing.T) {
-	fs := NewProjectFS(nil)
-	passed, msg := verifyWorkspaceBuild(fs)
-	if !passed {
-		t.Fatalf("Expected build to pass on valid workspace, but got error: %s", msg)
+func TestGetInitialDefaultProject(t *testing.T) {
+	files := getInitialDefaultProject()
+	if len(files) == 0 {
+		t.Fatalf("Expected default project files, got empty map")
 	}
-	if !strings.Contains(msg, "passed verification cleanly") {
-		t.Errorf("Expected success message, got: %s", msg)
+
+	app, ok := files["src/App.tsx"]
+	if !ok || app.Content == "" {
+		t.Errorf("Expected src/App.tsx in initial project files")
+	}
+
+	pkg, ok := files["package.json"]
+	if !ok || pkg.Content == "" {
+		t.Errorf("Expected package.json in initial project files")
+	}
+
+	css, ok := files["src/styles.css"]
+	if !ok || css.Content == "" {
+		t.Errorf("Expected src/styles.css in initial project files")
 	}
 }
 
-func TestVerifyWorkspaceBuild_MissingApp(t *testing.T) {
-	fs := NewProjectFS(nil)
-	delete(fs.files, "src/App.tsx")
-	passed, msg := verifyWorkspaceBuild(fs)
-	if passed {
-		t.Fatalf("Expected build to fail when src/App.tsx is missing")
-	}
-	if !strings.Contains(msg, "missing or empty") {
-		t.Errorf("Expected missing or empty message, got: %s", msg)
+func TestLoadFilesFromWorkspace(t *testing.T) {
+	files := LoadFilesFromWorkspace()
+	if len(files) == 0 {
+		t.Fatalf("Expected files from LoadFilesFromWorkspace, got 0")
 	}
 }
 
-func TestVerifyWorkspaceBuild_SyntaxError(t *testing.T) {
-	fs := NewProjectFS(nil)
-	origApp := fs.files["src/App.tsx"]
-	defer func() {
-		_ = fs.WriteFile("src/App.tsx", origApp.Content)
-	}()
-
-	// Break syntax in App.tsx
-	_ = fs.WriteFile("src/App.tsx", "import React from 'react';\nexport default function App() { return <div><unclosed tag }")
-
-	passed, msg := verifyWorkspaceBuild(fs)
-	if passed {
-		t.Fatalf("Expected build to fail on syntax error")
+func TestGenerateRequestEncoding(t *testing.T) {
+	req := GenerateRequest{
+		Prompt: "Create a modern dashboard",
+		Files: map[string]FileItem{
+			"src/App.tsx": {
+				Name:     "src/App.tsx",
+				Language: "typescript",
+				Content:  "export default function App() { return <div>Dashboard</div>; }",
+			},
+		},
+		Stream: true,
 	}
-	if !strings.Contains(msg, "Unexpected token") && !strings.Contains(msg, "Build failed") && !strings.Contains(msg, "error") {
-		t.Errorf("Expected build error snippet, got: %s", msg)
-	}
-}
 
-func TestCleanBuildError(t *testing.T) {
-	rawOutput := `npm notice run workspace@1.0.0 build
-npm notice run vite build
-vite v8.3.0 building client environment for production...
-transforming...
-✗ Build failed in 99ms
-error during build:
-Build failed with 1 error:
-
-[builtin:vite-transform] Unexpected token
-   ╭─[ src/App.tsx:2:59 ]
-   │
- 2 │ export default function App() { return <div><broken syntax
-   │                                                           │ 
-   │                                                           ╰─ 
-───╯
-
-    at aggregateBindingErrorsIntoJsError (file:///path/to/error.mjs:48:18)
-    at unwrapBindingResult (file:///path/to/error.mjs:18:128)
-`
-	cleaned := cleanBuildError(rawOutput)
-	if strings.Contains(cleaned, "aggregateBindingErrorsIntoJsError") {
-		t.Errorf("Expected node_modules stack trace to be stripped, but was present in: %s", cleaned)
+	bytes, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Failed to marshal GenerateRequest: %v", err)
 	}
-	if !strings.Contains(cleaned, "Unexpected token") {
-		t.Errorf("Expected 'Unexpected token' in cleaned error, got: %s", cleaned)
+
+	var decoded GenerateRequest
+	if err := json.Unmarshal(bytes, &decoded); err != nil {
+		t.Fatalf("Failed to unmarshal GenerateRequest: %v", err)
 	}
-	if !strings.Contains(cleaned, "src/App.tsx:2:59") {
-		t.Errorf("Expected file/line location in cleaned error, got: %s", cleaned)
+
+	if decoded.Prompt != req.Prompt {
+		t.Errorf("Prompt mismatch: expected %q, got %q", req.Prompt, decoded.Prompt)
+	}
+	if !decoded.Stream {
+		t.Errorf("Expected Stream to be true")
+	}
+	if len(decoded.Files) != 1 {
+		t.Errorf("Expected 1 file, got %d", len(decoded.Files))
 	}
 }

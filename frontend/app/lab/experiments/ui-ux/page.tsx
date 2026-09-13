@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -19,135 +19,206 @@ import {
   AlertCircle,
   X,
   Bot,
-  Terminal,
+  Terminal as TerminalIcon,
   Activity,
   CheckCircle2,
-  FilePlus,
-  FileText,
-  Trash2,
-  ShieldCheck,
+  Cpu,
   ChevronDown,
   ChevronRight,
-  Clock,
+  RefreshCw,
+  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import SandboxPreview from "./components/sandbox-preview";
+import SandboxPreview, { ProjectFile, GeneratingStatus } from "./components/sandbox-preview";
+import TerminalView, { TerminalRef } from "./components/terminal-view";
 import LogoutButton from "../../logout-button";
+import {
+  getWebContainer,
+  writeContainerFile,
+  spawnCommand,
+  checkCrossOriginIsolation,
+  starterFiles,
+} from "./lib/webcontainer";
+import {
+  StreamingActionParser,
+  BoltAction,
+} from "./lib/action-parser";
 
-interface ProjectFile {
-  name: string;
-  language: string;
-  content: string;
-}
-
-interface AgentAction {
-  type: string;
-  path?: string;
-  content?: string;
-  command?: string;
-  output?: string;
-  explanation?: string;
-}
-
-const initialFiles: Record<string, ProjectFile> = {
+const initialDefaultFiles: Record<string, ProjectFile> = {
   "src/App.tsx": {
     name: "src/App.tsx",
     language: "typescript",
-    content: `import React from "react";
-
-export default function App() {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-slate-100 p-8 font-sans">
-      <div className="max-w-md text-center">
-        <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 bg-clip-text text-transparent">
-          UI/UX Playground
-        </h1>
-        <p className="mt-3 text-sm text-slate-400 leading-relaxed">
-          The sandbox executes the agent project filesystem live. Enter a prompt below to build and modify components.
-        </p>
-      </div>
-    </div>
-  );
-}`,
+    content: (starterFiles.src as { directory: Record<string, { file: { contents: string } }> })
+      .directory["App.tsx"].file.contents,
+  },
+  "src/main.tsx": {
+    name: "src/main.tsx",
+    language: "typescript",
+    content: (starterFiles.src as { directory: Record<string, { file: { contents: string } }> })
+      .directory["main.tsx"].file.contents,
   },
   "src/styles.css": {
     name: "src/styles.css",
     language: "css",
-    content: `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`,
+    content: (starterFiles.src as { directory: Record<string, { file: { contents: string } }> })
+      .directory["styles.css"].file.contents,
+  },
+  "index.html": {
+    name: "index.html",
+    language: "html",
+    content: (starterFiles["index.html"] as { file: { contents: string } }).file.contents,
   },
   "package.json": {
     name: "package.json",
     language: "json",
-    content: `{
-  "name": "workspace",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "lucide-react": "^1.45.0"
-  }
-}`,
+    content: (starterFiles["package.json"] as { file: { contents: string } }).file.contents,
+  },
+  "tailwind.config.js": {
+    name: "tailwind.config.js",
+    language: "javascript",
+    content: (starterFiles["tailwind.config.js"] as { file: { contents: string } }).file.contents,
+  },
+  "vite.config.js": {
+    name: "vite.config.js",
+    language: "javascript",
+    content: (starterFiles["vite.config.js"] as { file: { contents: string } }).file.contents,
   },
 };
 
 const promptSuggestions = [
-  "Create a restaurant landing page",
-  "Create a developer portfolio",
-  "Create a finance dashboard",
-  "Change the hero background to blue",
+  "Create an authentic Italian restaurant landing page with a menu and table reservation form",
+  "Create a developer portfolio with interactive project cards, skills grid, and contact modal",
+  "Create a sleek fintech dashboard with net worth charts, asset breakdown, and transfer widget",
+  "Add dark glassmorphism styling and smooth interactive hover effects",
 ];
 
 export default function UiUxPlaygroundPage() {
-  // 1. Basic project/file state (structured files)
-  const [files, setFiles] = useState<Record<string, ProjectFile>>(initialFiles);
+  // 1. Files & Active Document State
+  const [files, setFiles] = useState<Record<string, ProjectFile>>(initialDefaultFiles);
   const [activeFileName, setActiveFileName] = useState<string>("src/App.tsx");
-  const [currentPromptTitle, setCurrentPromptTitle] = useState<string>("Project Sandbox Ready");
+  const [currentPromptTitle, setCurrentPromptTitle] = useState<string>("Bolt Playground Ready");
 
-  // 2. Prompt input state
+  // 2. Prompt & Generating State
   const [prompt, setPrompt] = useState<string>("");
-
-  // 3. Generation UI state
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
-  // 4. Preview panel controls
+  // 3. View Controls
   const [viewMode, setViewMode] = useState<"preview" | "code" | "activity">("preview");
+  const [activitySubTab, setActivitySubTab] = useState<"terminal" | "actions">("terminal");
   const [viewportSize, setViewportSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
-  // 5. Agent telemetry state
+  // 4. WebContainer & Dev Server State
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isBooting, setIsBooting] = useState<boolean>(true);
+  const [bootMessage, setBootMessage] = useState<string>("Initializing WebContainer runtime...");
+  const [liveLog, setLiveLog] = useState<string>("");
+
+  // 5. Agent Telemetry State
   const [agentThought, setAgentThought] = useState<string | null>(null);
-  const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
+  const [agentActions, setAgentActions] = useState<BoltAction[]>([]);
   const [recentModifiedFiles, setRecentModifiedFiles] = useState<string[]>([]);
-  const [generationPhase, setGenerationPhase] = useState<"idle" | "inspecting" | "architecting" | "verifying">("idle");
   const [expandedActionIndex, setExpandedActionIndex] = useState<number | null>(null);
+  const [generatingStatus, setGeneratingStatus] = useState<GeneratingStatus>({
+    step: "ready",
+    message: "",
+  });
+  const [previewRefreshKey, setPreviewRefreshKey] = useState<number>(0);
 
-  // 6. Code editor line numbers ref synchronization
+  // 6. Refs
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<TerminalRef | null>(null);
 
-  // Load existing project files from agent's workspace on mount
-  React.useEffect(() => {
-    fetch("/api/experiments/files")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.files && Object.keys(data.files).length > 0) {
-          setFiles(data.files);
-          if (data.files["src/App.tsx"]) {
-            setActiveFileName("src/App.tsx");
-          } else {
-            setActiveFileName(Object.keys(data.files)[0]);
+  // Boot WebContainer, install dependencies, and launch Vite dev server
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initWebContainer() {
+      if (!checkCrossOriginIsolation()) {
+        setIsBooting(false);
+        setBootMessage("Cross-Origin Isolation required for WebContainer.");
+        return;
+      }
+
+      try {
+        setBootMessage("Booting in-browser WebContainer (Node.js/Wasm)...");
+        terminalRef.current?.writeln("\x1b[1;34m[WebContainer] Booting virtual micro-OS...\x1b[0m");
+
+        const container = await getWebContainer();
+        if (!isMounted) return;
+
+        terminalRef.current?.writeln("\x1b[1;32m[WebContainer] Virtual filesystem mounted.\x1b[0m");
+
+        // 1. Listen for internal dev server port ready BEFORE spawning commands
+        container.on("server-ready", (port, url) => {
+          if (!isMounted) return;
+          terminalRef.current?.writeln(`\x1b[1;32m[Vite Dev Server] Ready at ${url} (port ${port})\x1b[0m`);
+          setPreviewUrl(url);
+          setIsBooting(false);
+        });
+
+        // 2. Install project dependencies first so node_modules exists
+        setBootMessage("Installing project dependencies (npm install)...");
+        terminalRef.current?.writeln("\x1b[1;33m[npm] Installing packages: react, react-dom, vite...\x1b[0m");
+
+        const installExitCode = await spawnCommand(
+          "npm",
+          ["install", "--no-audit", "--no-fund", "--prefer-offline"],
+          (chunk) => {
+            terminalRef.current?.write(chunk);
+            const line = chunk.trim();
+            if (line) setLiveLog(line);
           }
+        );
+
+        if (!isMounted) return;
+
+        if (installExitCode !== 0) {
+          terminalRef.current?.writeln(`\x1b[1;31m[npm Error] Install exited with code ${installExitCode}\x1b[0m`);
+          setBootMessage(`npm install failed (exit code ${installExitCode}). Check terminal logs.`);
+          setIsBooting(false);
+          return;
         }
-      })
-      .catch(() => {});
+
+        terminalRef.current?.writeln("\x1b[1;32m[npm] Dependencies installed successfully.\x1b[0m");
+
+        // 3. Launch Vite dev server directly via npm run dev
+        setBootMessage("Starting Vite development server...");
+        terminalRef.current?.writeln("\x1b[1;36m[Vite] Starting dev server (npm run dev)...\x1b[0m");
+
+        const devExitCode = await spawnCommand(
+          "npm",
+          ["run", "dev", "--", "--host"],
+          (chunk) => {
+            terminalRef.current?.write(chunk);
+            const line = chunk.trim();
+            if (line) setLiveLog(line);
+          }
+        );
+
+        if (!isMounted) return;
+
+        if (devExitCode !== 0) {
+          terminalRef.current?.writeln(`\x1b[1;31m[Vite Error] Dev server exited with code ${devExitCode}\x1b[0m`);
+          setBootMessage(`Vite dev server exited with code ${devExitCode}. Check terminal.`);
+          setIsBooting(false);
+        }
+
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setBootMessage(`WebContainer boot failed: ${msg}`);
+        terminalRef.current?.writeln(`\x1b[1;31m[Boot Error] ${msg}\x1b[0m`);
+        setIsBooting(false);
+      }
+    }
+
+    initWebContainer();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const activeFile = files[activeFileName] || Object.values(files)[0];
@@ -159,73 +230,233 @@ export default function UiUxPlaygroundPage() {
     }
   };
 
-  // Connected AI generation handler: prompt → AI Agent → structured files + telemetry
+  // Connected Streaming AI Generation Handler (Bolt-style SSE stream)
   const handleGenerate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
 
+    if (isBooting || !previewUrl) {
+      terminalRef.current?.writeln("\x1b[1;33m⚡ [Notice] In-browser WebContainer is initializing. Ready in a few seconds...\x1b[0m");
+    }
+
+    const userPrompt = prompt.trim();
     setIsGenerating(true);
     setErrorMessage(null);
-    setGenerationPhase("inspecting");
+    setCurrentPromptTitle(userPrompt);
+    setPrompt("");
+    setGeneratingStatus({
+      step: "connecting",
+      message: "Connecting to autonomous coding agent...",
+    });
 
-    // Dynamic phase transitions for realistic telemetry
-    const phaseTimer1 = setTimeout(() => setGenerationPhase("architecting"), 4000);
-    const phaseTimer2 = setTimeout(() => setGenerationPhase("verifying"), 16000);
+    terminalRef.current?.writeln(`\r\n\x1b[1;35m⚡ [Bolt AI Agent] Prompt: "${userPrompt}"\x1b[0m`);
+
+    const parser = new StreamingActionParser({
+      onArtifactStart: ({ title }) => {
+        terminalRef.current?.writeln(`\x1b[1;34m📦 Building Artifact: ${title}\x1b[0m`);
+        setGeneratingStatus({
+          step: "streaming",
+          message: `Building Artifact: ${title}`,
+        });
+      },
+      onActionStart: (action) => {
+        if (action.type === "file" && action.filePath) {
+          const path = action.filePath;
+          terminalRef.current?.writeln(`\x1b[1;36m📝 Streaming file: ${path}...\x1b[0m`);
+
+          setFiles((prev) => ({
+            ...prev,
+            [path]: {
+              name: path,
+              language: path.endsWith(".css") ? "css" : "typescript",
+              content: "",
+            },
+          }));
+          setActiveFileName(path);
+          setRecentModifiedFiles((prev) => (prev.includes(path) ? prev : [...prev, path]));
+          setGeneratingStatus({
+            step: "streaming",
+            message: `Writing ${path}...`,
+            filePath: path,
+            linesCount: 1,
+          });
+        } else if (action.type === "shell") {
+          terminalRef.current?.writeln(`\x1b[1;33m$ Preparing shell command: ${action.content || "..."}\x1b[0m`);
+          setGeneratingStatus({
+            step: "streaming",
+            message: `Shell: ${action.content || "preparing..."}`,
+          });
+        }
+
+        setAgentActions((prev) => [...prev, action]);
+      },
+      onActionStream: (action, delta) => {
+        if (action.type === "file" && action.filePath) {
+          const path = action.filePath;
+          setFiles((prev) => {
+            const existing = prev[path];
+            return {
+              ...prev,
+              [path]: {
+                name: path,
+                language: path.endsWith(".css") ? "css" : "typescript",
+                content: (existing?.content || "") + delta,
+              },
+            };
+          });
+          const count = (action.content.match(/\n/g) || []).length + 1;
+          setGeneratingStatus((prev) => ({
+            ...prev,
+            linesCount: count,
+          }));
+        }
+      },
+      onActionComplete: async (action) => {
+        if (action.type === "file" && action.filePath) {
+          const path = action.filePath;
+          setGeneratingStatus({
+            step: "applying",
+            message: `Applying ${path} to WebContainer...`,
+            filePath: path,
+          });
+          // Update React files state with the finalized clean code
+          setFiles((prev) => ({
+            ...prev,
+            [path]: {
+              name: path,
+              language: path.endsWith(".css") ? "css" : "typescript",
+              content: action.content,
+            },
+          }));
+          try {
+            await writeContainerFile(path, action.content);
+            terminalRef.current?.writeln(`\x1b[1;32m✓ Applied ${path} to WebContainer (HMR updated)\x1b[0m`);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            terminalRef.current?.writeln(`\x1b[1;31m✗ Failed writing ${path}: ${msg}\x1b[0m`);
+          }
+        } else if (action.type === "shell") {
+          const commandLine = action.content.trim();
+          if (commandLine) {
+            terminalRef.current?.writeln(`\x1b[1;33m$ ${commandLine}\x1b[0m`);
+            const parts = commandLine.split(" ").filter(Boolean);
+            const cmd = parts[0];
+            const args = parts.slice(1);
+            try {
+              await spawnCommand(cmd, args, (chunk) => {
+                terminalRef.current?.write(chunk);
+              });
+              terminalRef.current?.writeln(`\x1b[1;32m✓ Command completed: ${commandLine}\x1b[0m`);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              terminalRef.current?.writeln(`\x1b[1;31m✗ Command failed: ${msg}\x1b[0m`);
+            }
+          }
+        }
+
+        setAgentActions((prev) =>
+          prev.map((a) => (a.id === action.id ? { ...a, status: "complete", content: action.content } : a))
+        );
+      },
+      onThought: (thought) => {
+        setAgentThought(thought);
+      },
+      onArtifactComplete: () => {
+        terminalRef.current?.writeln(`\x1b[1;32m✓ Artifact finished successfully.\x1b[0m`);
+      },
+    });
 
     try {
       const res = await fetch("/api/experiments/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({
-          prompt: prompt.trim(),
-          files: files,
+          prompt: userPrompt,
+          files,
+          stream: true,
         }),
       });
 
-      clearTimeout(phaseTimer1);
-      clearTimeout(phaseTimer2);
-
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "Failed to generate structured files");
+        const errText = await res.text().catch(() => "");
+        throw new Error(errText || `Server responded with status ${res.status}`);
       }
 
-      const data = await res.json();
-
-      // Capture agent telemetry
-      if (data?.thought) {
-        setAgentThought(data.thought);
-      }
-      if (data?.actions && Array.isArray(data.actions)) {
-        setAgentActions(data.actions);
-        const touched = data.actions
-          .filter((a: AgentAction) => a.type === "write_file" || a.type === "create_file")
-          .map((a: AgentAction) => a.path)
-          .filter(Boolean);
-        setRecentModifiedFiles(touched as string[]);
+      if (!res.body) {
+        throw new Error("Streaming body not available in response.");
       }
 
-      if (data?.files && Object.keys(data.files).length > 0) {
-        setFiles(data.files);
-        setCurrentPromptTitle(prompt.trim());
-        setPrompt("");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let streamBuffer = "";
 
-        if (data.files[activeFileName]) {
-          // keep current file focused
-        } else if (data.files["src/App.tsx"]) {
-          setActiveFileName("src/App.tsx");
-        } else {
-          setActiveFileName(Object.keys(data.files)[0]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split("\n");
+        streamBuffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data:")) {
+            const dataContent = trimmed.slice(5).trim();
+            if (dataContent === "[DONE]" || !dataContent) continue;
+
+            try {
+              const parsed = JSON.parse(dataContent);
+              if (parsed.text) {
+                parser.feed(parsed.text);
+              }
+              if (parsed.thought) {
+                setAgentThought((prev) => (prev ? prev + parsed.thought : parsed.thought));
+              }
+              if (parsed.phase === "generating") {
+                setGeneratingStatus({
+                  step: "thinking",
+                  message: "Agent synthesizing UI components & architecture...",
+                });
+              }
+              if (parsed.status === "alive") {
+                if (parsed.elapsed) {
+                  setGeneratingStatus((prev) => ({
+                    ...prev,
+                    step: "thinking",
+                    elapsedSeconds: parsed.elapsed,
+                    message: `Agent reasoning & designing architecture (${parsed.elapsed}s)...`,
+                  }));
+                }
+                continue;
+              }
+              if (parsed.error) {
+                setErrorMessage(parsed.error);
+                terminalRef.current?.writeln(`\x1b[1;31m[Agent Error] ${parsed.error}\x1b[0m`);
+              }
+            } catch {
+              // Raw text chunk
+              parser.feed(dataContent);
+            }
+          }
         }
       }
+
+      parser.finish();
+      setGeneratingStatus({
+        step: "ready",
+        message: "Application updated successfully!",
+      });
+      setPreviewRefreshKey((k) => k + 1);
+      terminalRef.current?.writeln(`\x1b[1;32m⚡ AI agent generation complete.\x1b[0m\r\n`);
     } catch (err: unknown) {
-      clearTimeout(phaseTimer1);
-      clearTimeout(phaseTimer2);
       const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(msg || "Could not connect to generator. Please verify the service.");
+      setErrorMessage(msg);
+      terminalRef.current?.writeln(`\x1b[1;31m[Error] ${msg}\x1b[0m`);
     } finally {
       setIsGenerating(false);
-      setGenerationPhase("idle");
     }
   };
 
@@ -236,15 +467,27 @@ export default function UiUxPlaygroundPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleReset = () => {
-    setFiles(initialFiles);
+  const handleReset = async () => {
+    setFiles(initialDefaultFiles);
     setActiveFileName("src/App.tsx");
-    setCurrentPromptTitle("Project Sandbox Ready");
+    setCurrentPromptTitle("Bolt Playground Ready");
     setPrompt("");
     setErrorMessage(null);
     setAgentThought(null);
     setAgentActions([]);
     setRecentModifiedFiles([]);
+
+    // Reset files in WebContainer
+    try {
+      await writeContainerFile(
+        "src/App.tsx",
+        (starterFiles.src as { directory: Record<string, { file: { contents: string } }> })
+          .directory["App.tsx"].file.contents
+      );
+      terminalRef.current?.writeln("\x1b[1;33m[Reset] Workspace reset to starter template.\x1b[0m");
+    } catch {
+      // Ignore
+    }
   };
 
   const handleSwitchToFile = (fileName: string) => {
@@ -264,13 +507,146 @@ export default function UiUxPlaygroundPage() {
     return { label: "TS", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" };
   };
 
-  const hasBuildVerified = agentActions.some((a) => a.type === "verify_build");
-
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950 font-sans">
-      {/* ─── 1. INTEGRATED EXPERIMENT HEADER BAR ─── */}
+    <div className="flex h-screen w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950 font-sans">
+      
+      {/* ─── LEFT: AGENT SIDEPANEL ─── */}
+      <aside className="flex h-screen w-80 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all z-30 shadow-xl">
+        {/* Header */}
+        <div className="flex h-16 items-center gap-3 border-b border-zinc-200/80 px-5 dark:border-zinc-800/80 shrink-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 shadow-md shadow-blue-500/20 text-white">
+            <Bot className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Agent Control
+            </div>
+            <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+              Bolt.new AI Assistant
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Area (Suggestions, History, etc.) */}
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+          {isGenerating ? (
+            <div className="flex flex-col gap-3 rounded-2xl bg-blue-500/10 border border-blue-500/25 p-4 text-xs text-blue-400 animate-pulse shadow-inner">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-400 animate-ping" />
+                <span className="font-bold tracking-tight text-sm text-blue-500 dark:text-blue-300">
+                  Agent is Working...
+                </span>
+              </div>
+              <span className="text-[11px] text-blue-600/80 dark:text-blue-300/80 font-mono leading-relaxed">
+                {generatingStatus.message || "Streaming code changes to the WebContainer runtime..."}
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                <Sparkles className="h-3 w-3" />
+                <span>Try a Suggestion</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {promptSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    disabled={isGenerating}
+                    onClick={() => setPrompt(suggestion)}
+                    className="group relative overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-50 text-left text-zinc-600 hover:bg-white hover:text-blue-600 hover:border-blue-200 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-blue-400 dark:hover:border-blue-900/50 px-3.5 py-2.5 text-[11px] font-medium transition-all cursor-pointer leading-relaxed"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/0 to-blue-500/0 group-hover:from-blue-500/5 group-hover:to-transparent transition-all duration-500" />
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Activity / Thoughts Summary could go here */}
+          {agentActions.length > 0 && !isGenerating && (
+            <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-zinc-200/50 dark:border-zinc-800/50">
+               <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                <span className="flex items-center gap-2"><Activity className="h-3 w-3" /> Last Run</span>
+                <span className="text-zinc-500 dark:text-zinc-400">{agentActions.length} actions</span>
+              </div>
+              {agentThought && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed italic line-clamp-4 hover:line-clamp-none transition-all">
+                  "{agentThought.split('\n').pop()}"
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Input Area */}
+        <div className="p-4 border-t border-zinc-200/80 dark:border-zinc-800/80 shrink-0 bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur-md">
+          <form
+            onSubmit={handleGenerate}
+            className={cn(
+              "flex flex-col gap-3 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-300 dark:bg-zinc-950 focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-500/50",
+              isGenerating
+                ? "border-blue-500/60 ring-4 ring-blue-500/10 dark:border-blue-500/50"
+                : "border-zinc-200/90 dark:border-zinc-800/90"
+            )}
+          >
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              disabled={isGenerating || isBooting}
+              placeholder={
+                isBooting
+                  ? "Booting WebContainer environment..."
+                  : isGenerating
+                  ? generatingStatus.message || "Streaming..."
+                  : "Instruct the agent to build or modify UI..."
+              }
+              rows={4}
+              className="w-full resize-none bg-transparent text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-500 disabled:opacity-60"
+            />
+
+            <div className="flex items-center justify-between pt-1">
+              <div className="text-zinc-400 flex items-center gap-1.5">
+                <Sparkles className={cn("h-4 w-4", isGenerating ? "text-blue-400 animate-spin" : "text-blue-500/70")} />
+              </div>
+              <button
+                type="submit"
+                disabled={!prompt.trim() || isGenerating || isBooting}
+                className={cn(
+                  "flex h-8 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white transition-all duration-200 cursor-pointer",
+                  prompt.trim() && !isGenerating && !isBooting
+                    ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-md shadow-blue-500/25 hover:from-blue-700 hover:to-violet-700 hover:shadow-blue-500/40 active:scale-95"
+                    : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed shadow-none"
+                )}
+              >
+                {isBooting ? (
+                  <>
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-400/40 border-t-zinc-400" />
+                    <span>Booting</span>
+                  </>
+                ) : isGenerating ? (
+                  <>
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    <span>Working</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Send</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </aside>
+
+      {/* ─── RIGHT: MAIN WORKSPACE ─── */}
+      <div className="flex flex-1 flex-col overflow-hidden w-full min-w-0 bg-zinc-50 dark:bg-zinc-950">
+        {/* ─── 1. INTEGRATED EXPERIMENT HEADER BAR ─── */}
       <header className="flex h-16 w-full items-center justify-between border-b border-zinc-200/80 bg-white/90 px-4 sm:px-6 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/90 shrink-0 z-20">
-        {/* Left: Navigation, Experiment Title & Live Status */}
+        {/* Left: Navigation, Title & Live Status */}
         <div className="flex items-center gap-3.5 min-w-0">
           <Link
             href="/lab/experiments"
@@ -285,11 +661,11 @@ export default function UiUxPlaygroundPage() {
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-50 truncate">
-                UI/UX AI Agent Sandbox
+                Bolt.new Coding Agent
               </h1>
-              <span className="hidden xs:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-600 dark:text-blue-400 shrink-0">
-                <Bot className="h-3 w-3" />
-                Autonomous Engine
+              <span className="hidden xs:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Cpu className="h-3 w-3" />
+                WebContainer Wasm
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[280px] sm:max-w-md">
@@ -300,7 +676,7 @@ export default function UiUxPlaygroundPage() {
 
         {/* Center: Viewport & View Mode Toggles */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Viewport size switcher (Desktop, Tablet, Mobile) */}
+          {/* Viewport size switcher */}
           <div className="hidden lg:flex items-center rounded-xl border border-zinc-200/80 bg-zinc-100/60 p-0.5 dark:border-zinc-800/80 dark:bg-zinc-900/60">
             <button
               type="button"
@@ -346,7 +722,7 @@ export default function UiUxPlaygroundPage() {
             </button>
           </div>
 
-          {/* View Mode Toggle: Preview vs Code vs Agent Activity */}
+          {/* View Mode Toggle: Preview vs Code vs Terminal / Activity */}
           <div className="flex items-center rounded-xl border border-zinc-200/80 bg-zinc-100/60 p-0.5 dark:border-zinc-800/80 dark:bg-zinc-900/60 shadow-xs">
             <button
               type="button"
@@ -386,8 +762,8 @@ export default function UiUxPlaygroundPage() {
                   : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
               )}
             >
-              <Activity className="h-3.5 w-3.5" />
-              <span>Agent Activity</span>
+              <TerminalIcon className="h-3.5 w-3.5" />
+              <span>Terminal & Log</span>
               {agentActions.length > 0 && (
                 <span className="ml-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[10px] px-1.5 py-0.2 font-mono font-bold">
                   {agentActions.length}
@@ -423,7 +799,7 @@ export default function UiUxPlaygroundPage() {
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar touch-pan-x flex-nowrap pr-2">
             <span className="hidden sm:flex items-center gap-1 pr-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 shrink-0">
               <FolderTree className="h-3 w-3" />
-              Files:
+              VFS:
             </span>
             {Object.keys(files).map((fileName) => {
               const isSelected = activeFileName === fileName;
@@ -482,7 +858,7 @@ export default function UiUxPlaygroundPage() {
         {/* Workspace Display Area */}
         <div className="flex flex-1 items-center justify-center overflow-hidden w-full h-full min-h-0 bg-zinc-200/30 dark:bg-black/30">
           {viewMode === "preview" ? (
-            /* Live Sandbox Preview Container */
+            /* Live WebContainer Preview */
             <div
               className={cn(
                 "h-full w-full transition-all duration-300 overflow-hidden",
@@ -494,235 +870,164 @@ export default function UiUxPlaygroundPage() {
               <SandboxPreview
                 files={files}
                 className="h-full w-full"
-                keyTrigger={currentPromptTitle}
-                onSwitchToFile={handleSwitchToFile}
+                keyTrigger={previewRefreshKey}
+                generatingStatus={generatingStatus}
+                previewUrl={previewUrl}
+                isBooting={isBooting}
+                bootMessage={bootMessage}
+                liveLog={liveLog}
                 isGenerating={isGenerating}
+                onReload={() => {
+                  terminalRef.current?.writeln("\x1b[1;36m[Preview] Manual preview reload triggered.\x1b[0m");
+                }}
+                onSwitchToTerminal={() => {
+                  setViewMode("activity");
+                  setActivitySubTab("terminal");
+                }}
+                onSwitchToCode={() => setViewMode("code")}
               />
             </div>
           ) : viewMode === "code" ? (
-            /* Interactive Code View Panel with Gutter and Line Numbers */
-            <div className="flex h-full w-full flex-col overflow-hidden bg-zinc-950 font-mono text-xs text-zinc-200">
-              {/* Code Bar Header */}
-              <div className="flex h-9 items-center justify-between border-b border-zinc-800/80 px-4 text-[11px] text-zinc-400 bg-zinc-900/60 shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 font-semibold text-blue-400">
-                    <FileCode2 className="h-3.5 w-3.5" />
-                    {activeFileName}
-                  </span>
-                  <span className="hidden sm:inline-block text-[10px] text-zinc-500">
-                    • {contentLines.length} lines • {(activeFile?.content || "").length} chars
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Live Synced
-                  </span>
-                </div>
+            /* Code Editor with Line Numbers */
+            <div className="relative flex h-full w-full overflow-hidden bg-zinc-950">
+              <div
+                ref={lineNumbersRef}
+                className="flex flex-col py-4 pl-3 pr-2 text-right font-mono text-xs select-none text-zinc-600 dark:text-zinc-600 bg-zinc-950 border-r border-zinc-850 shrink-0 overflow-hidden"
+                style={{ width: "3.5rem" }}
+              >
+                {contentLines.map((_, i) => (
+                  <div key={i} className="h-5 leading-5 text-[11px]">
+                    {i + 1}
+                  </div>
+                ))}
               </div>
 
-              {/* Editor Container with Line Numbers Gutter */}
-              <div className="flex flex-1 overflow-hidden bg-zinc-950">
-                <div
-                  ref={lineNumbersRef}
-                  className="w-12 select-none border-r border-zinc-800/80 bg-zinc-900/40 py-3 text-right pr-3 font-mono text-[11px] leading-5 text-zinc-600 dark:text-zinc-500 overflow-hidden shrink-0"
-                >
-                  {contentLines.map((_, i) => (
-                    <div key={i}>{i + 1}</div>
-                  ))}
-                </div>
-
-                <textarea
-                  value={activeFile?.content || ""}
-                  onChange={(e) => {
-                    const newContent = e.target.value;
-                    setFiles((prev) => ({
-                      ...prev,
-                      [activeFileName]: {
-                        ...prev[activeFileName],
-                        content: newContent,
-                      },
-                    }));
-                  }}
-                  onScroll={handleEditorScroll}
-                  spellCheck={false}
-                  className="flex-1 w-full resize-none bg-transparent p-3 font-mono text-xs leading-5 text-zinc-200 focus:outline-none selection:bg-blue-600/30 overflow-auto"
-                />
-              </div>
+              <textarea
+                readOnly
+                value={activeFile?.content || ""}
+                onScroll={handleEditorScroll}
+                spellCheck={false}
+                className="h-full w-full resize-none bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-200 focus:outline-none selection:bg-blue-600/30 selection:text-white overflow-auto whitespace-pre"
+              />
             </div>
           ) : (
-            /* ─── 3. AGENT ACTIVITY & TELEMETRY DASHBOARD ─── */
-            <div className="flex h-full w-full flex-col overflow-y-auto bg-zinc-950 p-4 sm:p-6 text-zinc-100 font-sans">
-              <div className="max-w-4xl mx-auto w-full space-y-6">
-                {/* Agent Header Summary Card */}
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 sm:p-5 backdrop-blur-xl shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3.5">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600/15 border border-blue-500/30 text-blue-400">
-                      <Bot className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-sm text-white">Autonomous Agent Loop</h3>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300">
-                          Gemini 3.1 Flash + Tools
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        Inspection • Filesystem Actions • Terminal Commands • Self-Healing Verification
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {hasBuildVerified ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                        Build Verified (0 errors)
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800/80 px-3 py-1 text-xs font-medium text-zinc-300">
-                        <Clock className="h-3.5 w-3.5 text-zinc-400" />
-                        Ready
-                      </span>
+            /* Terminal & Agent Activity Split View */
+            <div className="flex h-full w-full flex-col bg-zinc-950 overflow-hidden">
+              {/* Activity Subtabs */}
+              <div className="flex h-10 items-center justify-between border-b border-zinc-800/80 bg-zinc-900/60 px-4 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActivitySubTab("terminal")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer",
+                      activitySubTab === "terminal"
+                        ? "bg-zinc-800 text-zinc-100 font-semibold"
+                        : "text-zinc-400 hover:text-zinc-200"
                     )}
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400">
-                      {agentActions.length} Actions
-                    </span>
-                  </div>
+                  >
+                    <TerminalIcon className="h-3.5 w-3.5 text-blue-400" />
+                    <span>Interactive Terminal</span>
+                  </button>
+                  <button
+                    onClick={() => setActivitySubTab("actions")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer",
+                      activitySubTab === "actions"
+                        ? "bg-zinc-800 text-zinc-100 font-semibold"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    )}
+                  >
+                    <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Agent Actions ({agentActions.length})</span>
+                  </button>
                 </div>
+              </div>
 
-                {/* Agent Architectural Reasoning Card */}
-                {agentThought && (
-                  <div className="rounded-2xl border border-zinc-800/90 bg-zinc-900/40 p-5 shadow-lg">
-                    <div className="flex items-center gap-2 mb-3 text-xs font-semibold uppercase tracking-wider text-blue-400">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Agent Reasoning & Plan
-                    </div>
-                    <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed whitespace-pre-line font-normal bg-black/30 p-4 rounded-xl border border-zinc-800/60">
-                      {agentThought}
-                    </div>
-                  </div>
-                )}
+              {/* Subtab Content */}
+              <div className="flex-1 w-full overflow-hidden p-3">
+                {activitySubTab === "terminal" ? (
+                  <TerminalView ref={terminalRef} className="h-full w-full" />
+                ) : (
+                  <div className="h-full w-full overflow-y-auto space-y-3 pr-2">
+                    {/* Agent Thinking Card */}
+                    {agentThought && (
+                      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2 text-xs font-bold text-zinc-300">
+                          <Bot className="h-4 w-4 text-blue-400" />
+                          <span>Agent Strategy & Thoughts</span>
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">
+                          {agentThought}
+                        </p>
+                      </div>
+                    )}
 
-                {/* Autonomous Tool Execution Timeline */}
-                <div className="rounded-2xl border border-zinc-800/90 bg-zinc-900/40 p-5 shadow-lg">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                      <Terminal className="h-3.5 w-3.5 text-indigo-400" />
-                      Executed Tool Actions Timeline
-                    </div>
-                    <span className="text-[11px] text-zinc-500 font-mono">
-                      Total: {agentActions.length} steps
-                    </span>
-                  </div>
-
-                  {agentActions.length === 0 ? (
-                    <div className="text-center py-10 text-zinc-500 text-xs">
-                      No agent actions recorded yet. Enter a prompt below to trigger the autonomous agent loop.
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {agentActions.map((action, idx) => {
+                    {/* Action Items List */}
+                    {agentActions.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
+                        <Activity className="h-8 w-8 mb-2 opacity-40" />
+                        <p className="text-xs">No agent actions recorded yet. Submit a prompt to start.</p>
+                      </div>
+                    ) : (
+                      agentActions.map((action, idx) => {
                         const isExpanded = expandedActionIndex === idx;
-                        const isVerify = action.type.includes("verify");
-                        const isWrite = action.type === "write_file" || action.type === "create_file";
-                        const isDelete = action.type === "delete_file";
-                        const isCommand = action.type === "run_terminal_command";
-
+                        const uniqueKey = action.id ? `${action.id}-${idx}` : `action-${idx}`;
                         return (
                           <div
-                            key={idx}
-                            className="rounded-xl border border-zinc-800/70 bg-zinc-900/60 p-3 text-xs transition-all hover:border-zinc-700/80"
+                            key={uniqueKey}
+                            className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-3.5 transition"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-2.5 min-w-0">
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-[10px] font-mono text-zinc-400 mt-0.5">
-                                  {idx + 1}
-                                </span>
-
-                                <div className="min-w-0 space-y-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span
-                                      className={cn(
-                                        "font-mono font-semibold px-2 py-0.5 rounded text-[10px] uppercase tracking-wider",
-                                        isVerify
-                                          ? action.type === "verify_build"
-                                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                            : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                                          : isWrite
-                                          ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-                                          : isDelete
-                                          ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                                          : isCommand
-                                          ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
-                                          : "bg-zinc-800 text-zinc-300 border border-zinc-700"
-                                      )}
-                                    >
-                                      {action.type}
-                                    </span>
-
-                                    {action.path && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSwitchToFile(action.path!)}
-                                        className="font-mono text-[11px] text-blue-400 hover:underline cursor-pointer"
-                                      >
-                                        {action.path}
-                                      </button>
-                                    )}
-
-                                    {action.command && (
-                                      <span className="font-mono text-[11px] text-purple-300 bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-800/40">
-                                        $ {action.command}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {action.explanation && (
-                                    <p className="text-zinc-300 text-[12px] leading-relaxed">
-                                      {action.explanation}
-                                    </p>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase",
+                                    action.type === "file"
+                                      ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                                      : "bg-purple-500/15 text-purple-400 border border-purple-500/30"
                                   )}
-                                </div>
-                              </div>
-
-                              {action.output && (
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedActionIndex(isExpanded ? null : idx)}
-                                  className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 shrink-0 cursor-pointer pt-0.5"
                                 >
-                                  <span>{isExpanded ? "Hide" : "Output"}</span>
-                                  {isExpanded ? (
-                                    <ChevronDown className="h-3 w-3" />
-                                  ) : (
-                                    <ChevronRight className="h-3 w-3" />
-                                  )}
-                                </button>
-                              )}
+                                  {action.type}
+                                </span>
+                                {action.filePath && (
+                                  <button
+                                    onClick={() => handleSwitchToFile(action.filePath!)}
+                                    className="font-mono text-xs text-blue-400 hover:underline"
+                                  >
+                                    {action.filePath}
+                                  </button>
+                                )}
+                              </div>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                                  action.status === "complete"
+                                    ? "text-emerald-400 bg-emerald-500/10"
+                                    : "text-amber-400 bg-amber-500/10"
+                                )}
+                              >
+                                {action.status}
+                              </span>
                             </div>
 
-                            {/* Expandable output */}
-                            {isExpanded && action.output && (
-                              <div className="mt-2.5 pt-2 border-t border-zinc-800/60">
-                                <pre className="font-mono text-[10px] text-zinc-300 bg-black/60 p-3 rounded-lg overflow-x-auto whitespace-pre-wrap max-h-48 border border-zinc-800/40">
-                                  {action.output}
-                                </pre>
+                            {action.content && action.type === "shell" && (
+                              <div className="mt-2 text-xs font-mono text-purple-300 bg-black/40 p-2 rounded border border-purple-900/30">
+                                $ {action.content}
                               </div>
                             )}
                           </div>
                         );
-                      })}
-                    </div>
-                  )}
-                </div>
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Error Message Alert if Any */}
+      {/* Error Alert */}
       {errorMessage && (
         <div className="flex items-center justify-between border-t border-rose-500/25 bg-rose-500/10 px-4 py-2 text-xs font-medium text-rose-300 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -739,91 +1044,7 @@ export default function UiUxPlaygroundPage() {
         </div>
       )}
 
-      {/* ─── 4. BOTTOM PROMPT INPUT & ACTIVE AGENT STATUS BAR ─── */}
-      <div className="shrink-0 border-t border-zinc-200/80 bg-white/95 px-4 py-3 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/95 z-20">
-        <div className="flex flex-col gap-2 max-w-6xl mx-auto">
-          {/* Active Generation Phase Pill or Suggestions */}
-          {isGenerating ? (
-            <div className="flex items-center justify-between rounded-xl bg-blue-500/10 border border-blue-500/25 px-3 py-1.5 text-xs text-blue-400 animate-pulse">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-blue-400 animate-ping" />
-                <span className="font-medium">
-                  {generationPhase === "inspecting" && "🔍 Step 1/3: Inspecting workspace filesystem & analyzing domain..."}
-                  {generationPhase === "architecting" && "✍️ Step 2/3: Autonomous agent architecting & writing React files..."}
-                  {generationPhase === "verifying" && "⚡ Step 3/3: Running controlled terminal build & verifying integrity..."}
-                </span>
-              </div>
-              <span className="text-[10px] text-blue-300/80 font-mono hidden sm:inline">Multi-turn loop active</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x">
-              <span className="text-[11px] font-semibold text-zinc-400 shrink-0">Try:</span>
-              {promptSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  disabled={isGenerating}
-                  onClick={() => setPrompt(suggestion)}
-                  className="rounded-lg border border-zinc-200/80 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-850 dark:hover:text-zinc-200 px-2.5 py-1 text-[11px] transition-all whitespace-nowrap cursor-pointer shrink-0"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Input Form with Generate Button */}
-          <form
-            onSubmit={handleGenerate}
-            className={cn(
-              "relative flex items-center rounded-2xl border bg-white p-1.5 sm:p-2 shadow-md backdrop-blur-xl transition-all duration-300 dark:bg-zinc-900",
-              isGenerating
-                ? "border-blue-500/60 ring-2 ring-blue-500/25 dark:border-blue-500/50"
-                : "border-zinc-200/90 dark:border-zinc-800/90"
-            )}
-          >
-            <div className="pl-2 sm:pl-3 text-zinc-400 shrink-0">
-              <Sparkles className={cn("h-4 w-4", isGenerating ? "text-blue-400 animate-spin" : "text-blue-500")} />
-            </div>
-
-            <input
-              type="text"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              disabled={isGenerating}
-              placeholder={
-                isGenerating
-                  ? "Autonomous agent is executing tools..."
-                  : "Describe changes or new UI (e.g. Create a restaurant landing page)..."
-              }
-              className="flex-1 min-w-0 bg-transparent px-2.5 sm:px-3 text-xs sm:text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-500 disabled:opacity-60"
-            />
-
-            {/* Generate Button */}
-            <button
-              type="submit"
-              disabled={!prompt.trim() || isGenerating}
-              className={cn(
-                "flex h-9 sm:h-10 items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 text-xs font-semibold text-white shadow-md transition-all duration-200 cursor-pointer shrink-0",
-                prompt.trim() && !isGenerating
-                  ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-blue-500/25 hover:from-blue-700 hover:to-violet-700 hover:shadow-blue-500/35 active:scale-95"
-                  : "bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
-              )}
-            >
-              {isGenerating ? (
-                <>
-                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                  <span className="hidden xs:inline">Agent Working...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="h-3.5 w-3.5" />
-                  <span>Generate</span>
-                </>
-              )}
-            </button>
-          </form>
-        </div>
+      {/* ─── BOTTOM PROMPT INPUT REMOVED - MOVED TO SIDEPANEL ─── */}
       </div>
     </div>
   );

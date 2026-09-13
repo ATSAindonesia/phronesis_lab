@@ -22,6 +22,10 @@ type Config struct {
 
 	FrontendURL string
 
+	LLMBaseURL string
+	LLMAPIKey  string
+	LLMModel   string
+
 	GeminiAPIKey string
 	GeminiModel  string
 }
@@ -46,6 +50,10 @@ func LoadConfig() *Config {
 		JWTExpiry: getEnvInt("JWT_EXPIRY_MINUTES", 60),
 
 		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
+
+		LLMBaseURL: getEnv("LLM_BASE_URL", "https://tokenportal.id/v1"),
+		LLMAPIKey:  getEnv("LLM_API_KEY", "tp-2N6rVu_6tbXZU4N5V6WqxKRL-_cObXw6r64P5qsnFdU"),
+		LLMModel:   getEnv("LLM_MODEL", "qwen-3.8-flash"),
 
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-3.6-flash"),
