@@ -16,6 +16,7 @@ func (st *Store) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sessions/{id}", st.hGet)
 	mux.HandleFunc("POST /v1/sessions/{id}/messages", st.hMessage)
 	mux.HandleFunc("GET /v1/sessions/{id}/events", st.hEvents)
+	RegisterPreviewProxy(mux)
 }
 
 func (st *Store) authed(r *http.Request) bool {

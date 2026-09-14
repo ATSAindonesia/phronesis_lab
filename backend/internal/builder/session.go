@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -61,6 +62,9 @@ type SessionJSON struct {
 	ID         string      `json:"id"`
 	Status     string      `json:"status"` // "ready" | "running" | "error"
 	PreviewURL string      `json:"previewUrl"`
+	// PreviewPath is the host-agnostic form ("/b/4500/") the UI should
+	// prefer when embedding the preview; see proxyPreview below.
+	PreviewPath string      `json:"previewPath,omitempty"`
 	Messages   []ChatMsg   `json:"messages"`
 	Events     []EventStub `json:"events"`
 	Project    ProjectInfo `json:"project"`
@@ -120,8 +124,9 @@ func (s *Session) snapshot() SessionJSON {
 	defer s.mu.Unlock()
 	out := SessionJSON{
 		ID: s.ID, Status: s.status, PreviewURL: s.Preview,
-		Messages: append([]ChatMsg{}, s.messages...),
-		Events:   []EventStub{},
+		PreviewPath: fmt.Sprintf("/b/%d/", s.HostPort),
+		Messages:    append([]ChatMsg{}, s.messages...),
+		Events:      []EventStub{},
 	}
 	out.Project = ProjectInfo{
 		Title: "builder-app", Framework: "vite-react",

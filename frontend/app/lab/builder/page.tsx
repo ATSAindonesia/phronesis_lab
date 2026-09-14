@@ -7,6 +7,7 @@ interface BuilderSession {
   id: string;
   status: "ready" | "running" | "error";
   previewUrl: string;
+  previewPath?: string;
   messages: { id: string; role: string; content: string; createdAt: string }[];
   project: { title: string; framework: string; artifacts: { path: string; summary: string }[] };
 }
@@ -66,7 +67,23 @@ export default function BuilderPage() {
   const [liveEvents, setLiveEvents] = useState<AgentEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  // Preview URL dari backend pakai "localhost" — ganti hostname-nya supaya
+  // iframe jalan dari host mana pun (localhost, LAN IP, Tailscale IP).
+  useEffect(() => {
+    if (!session?.previewUrl) {
+      setPreviewSrc(null);
+      return;
+    }
+    const m = session.previewUrl.match(/:(\d{4,5})\/?$/);
+    if (m && typeof window !== "undefined") {
+      setPreviewSrc(`${window.location.protocol}//${window.location.hostname}:${m[1]}`);
+    } else {
+      setPreviewSrc(session.previewPath || session.previewUrl);
+    }
+  }, [session?.previewUrl, session?.previewPath]);
 
   const canStart = prompt.trim().length > 0 && !loading;
   const canSend = message.trim().length > 0 && session !== null && !loading;
@@ -290,14 +307,14 @@ export default function BuilderPage() {
             </p>
           ) : (
             <>
-              {session.previewUrl ? (
+              {previewSrc ? (
                 <p className="mb-2 truncate text-[10px] text-stone-400 dark:text-zinc-500">
-                  {session.previewUrl}
+                  {previewSrc}
                 </p>
               ) : null}
               <iframe
                 title="Preview"
-                src={session.previewUrl || "about:blank"}
+                src={previewSrc || "about:blank"}
                 className="min-h-0 flex-1 rounded-lg border border-stone-200 bg-stone-950 dark:border-zinc-800"
                 style={{ minHeight: "calc(100vh - 380px)" }}
               />
