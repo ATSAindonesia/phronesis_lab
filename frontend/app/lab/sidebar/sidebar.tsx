@@ -11,6 +11,7 @@ import {
   Terminal,
   Settings,
   FolderGit2,
+  Hammer,
   ChevronRight,
   ShieldCheck,
   Zap,
@@ -27,6 +28,7 @@ export interface NavItem {
 const navItems: NavItem[] = [
   { name: "Overview", href: "/lab", icon: FlaskConical },
   { name: "Experiments", href: "/lab/experiments", icon: FolderGit2, badge: "3 Running" },
+  { name: "Builder", href: "/lab/builder", icon: Hammer },
   { name: "Models", href: "/lab/models", icon: Cpu },
   { name: "Datasets", href: "/lab/datasets", icon: Database },
   { name: "Analytics", href: "/lab/analytics", icon: LineChart },
