@@ -10,7 +10,8 @@ import (
 	"strconv"
 )
 
-// previewPathRe matches /b/{port}/... preview paths.
+// previewPathRe matches /b/{port}[/...] preview paths (slash opsional —
+// vite dengan base /b/{port}/ redirect sendiri ke bentuk berslash).
 var previewPathRe = regexp.MustCompile(`^/b/(\d{4,5})(/.*)?$`)
 
 // RegisterPreviewProxy mounts GET/HEAD /b/{port}/ -> 127.0.0.1:{port}.
@@ -40,14 +41,10 @@ func previewProxy(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusInternalServerError, "bad target")
 		return
 	}
-	rest := "/"
-	if m[2] != "" {
-		rest = m[2]
-	}
-	// Rewrite the incoming path onto the target origin.
+	// Vite di sandbox dijalankan dengan --base /b/{port}/ (BASE_PATH env),
+	// jadi path HARUS diteruskan apa adanya — jangan di-strip. Kalau di-strip,
+	// vite menerima "/" dan me-redirect balik ke base -> loop 302.
 	r2 := r.Clone(r.Context())
-	r2.URL.Path = rest
-	r2.URL.RawPath = ""
 	r2.Host = target.Host
 	// Vite dev server checks Host/Origin for HMR websocket + asset URLs;
 	// present the preview origin so it serves absolute /@vite paths fine.
@@ -55,6 +52,6 @@ func previewProxy(w http.ResponseWriter, r *http.Request) {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	// Strip the CSP-unsafe hop headers; keep websocket upgrade intact.
 	proxy.FlushInterval = -1 // streaming HMR
-	log.Printf("[builder-preview] %s -> %s%s", r.URL.Path, target, rest)
+	log.Printf("[builder-preview] %s -> %s%s", r.URL.Path, target, r.URL.Path)
 	proxy.ServeHTTP(w, r2)
 }

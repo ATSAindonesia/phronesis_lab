@@ -70,8 +70,10 @@ export default function BuilderPage() {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
 
-  // Preview URL dari backend pakai "localhost" — ganti hostname-nya supaya
-  // iframe jalan dari host mana pun (localhost, LAN IP, Tailscale IP).
+  // Preview URL dari backend pakai "localhost" — pilih bentuk sesuai cara
+  // akses: hostname IP (localhost/LAN/Tailscale) -> direct port (HMR jalan);
+  // hostname domain via Cloudflare -> path /b/{port}/ (port non-standar tidak
+  // didukung proxy Cloudflare).
   useEffect(() => {
     if (!session?.previewUrl) {
       setPreviewSrc(null);
@@ -79,7 +81,13 @@ export default function BuilderPage() {
     }
     const m = session.previewUrl.match(/:(\d{4,5})\/?$/);
     if (m && typeof window !== "undefined") {
-      setPreviewSrc(`${window.location.protocol}//${window.location.hostname}:${m[1]}`);
+      const host = window.location.hostname;
+      const isDirect = host === "localhost" || host === "127.0.0.1" || /^\d+\.\d+\.\d+\.\d+$/.test(host);
+      setPreviewSrc(
+        isDirect
+          ? `${window.location.protocol}//${host}:${m[1]}`
+          : session.previewPath || `/b/${m[1]}/`
+      );
     } else {
       setPreviewSrc(session.previewPath || session.previewUrl);
     }

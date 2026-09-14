@@ -16,6 +16,6 @@ cd /data/app
 
 # Dev server loop: auto-restart if vite crashes on a transient broken edit.
 while true; do
-  runuser -u "$RUN_AS" -- npx vite --host 0.0.0.0 --port 5173 || true
+  runuser -u "$RUN_AS" -- npx vite --host 0.0.0.0 --port 5173 ${BASE_PATH:+--base "$BASE_PATH"} || true
   sleep 2
 done

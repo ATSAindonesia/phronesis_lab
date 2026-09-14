@@ -54,6 +54,12 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
+		// Preview sandbox builder (Vite di container) — butuh pass-through,
+		// jangan di-redirect ke login.
+		if strings.HasPrefix(r.URL.Path, "/b/") {
+			http.NotFound(w, r)
+			return
+		}
 		// Semua link selain endpoint API diarahkan langsung ke halaman login
 		http.Redirect(w, r, loginURL, http.StatusFound)
 	})

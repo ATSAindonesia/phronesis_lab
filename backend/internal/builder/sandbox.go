@@ -54,6 +54,7 @@ func startSandbox(ctx context.Context, s *Session) error {
 		"-p", fmt.Sprintf("%d:5173", s.HostPort),
 		"-v", s.Dir+":/data",
 		"-e", "BUILDER_UID="+uid,
+		"-e", fmt.Sprintf("BASE_PATH=/b/%d/", s.HostPort),
 		"--label", "lab.builder=1",
 		"--memory", "1g", "--cpus", "2",
 		sandboxImage); err != nil {
@@ -64,11 +65,13 @@ func startSandbox(ctx context.Context, s *Session) error {
 	s.Preview = fmt.Sprintf("http://localhost:%d", s.HostPort)
 	s.mu.Unlock()
 
-	// Wait until vite answers.
+	// Wait until vite answers. Health check pakai base path (vite dengan
+	// BASE_PATH meredirect / ke base-nya).
+	healthURL := fmt.Sprintf("http://localhost:%d%s", s.HostPort, fmt.Sprintf("/b/%d/", s.HostPort))
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		rCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		c := exec.CommandContext(rCtx, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", s.Preview)
+		c := exec.CommandContext(rCtx, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", healthURL)
 		res, _ := c.Output()
 		cancel()
 		if strings.TrimSpace(string(res)) == "200" {

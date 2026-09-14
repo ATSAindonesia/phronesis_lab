@@ -251,6 +251,7 @@ RULES:
 - Entry point src/App.tsx MUST export default a component; src/main.tsx already renders <App/>.
 - Keep apps to a few files: src/App.tsx plus src/components/*.tsx as needed.
 - Output code that COMPILES: valid TSX, no placeholders like "// rest of code", no TODO stubs.
+- NEVER reference binary assets (images, fonts) that you have not created. Do NOT use import statements for .png/.jpg/.svg files — use inline SVG, CSS gradients, or https://images.unsplash.com/... URLs instead.
 - Make the UI beautiful by default: gradients, spacing, responsive layout, dark theme friendly.
 - Do not wrap file content in markdown fences. No text after </boltArtifact>.`
 

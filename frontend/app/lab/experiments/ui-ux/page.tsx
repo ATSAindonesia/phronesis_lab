@@ -56,8 +56,9 @@ RULES:
 - filePath relative to project root. Allowed: src/..., public/..., index.html. NEVER emit package.json, vite.config.js, node_modules, package-lock.json.
 - File actions REPLACE the file entirely — re-output the WHOLE file when editing.
 - The Vite dev server is ALREADY RUNNING with HMR. NEVER emit npm run dev / vite / npm create. Preinstalled: react, react-dom, lucide-react, clsx, tailwind-merge. Only shell-install NEW packages you really need.
-- Stack: React 18 + Tailwind CSS v4 (wired via src/index.css @import "tailwindcss";). Entry src/App.tsx MUST export default a component; src/main.tsx renders <App/>.
+- Stack: React 18 + Tailwind CSS v4 (wired via src/index.css @import "tailwindcss";). Entry src/App.jsx MUST export default a component; src/main.jsx renders <App/>.
 - Output code that COMPILES: valid TSX, complete files, no placeholders, no TODO stubs, no markdown fences. No text after </boltArtifact>.
+- NEVER reference binary assets (images/fonts) you have not created. Do NOT import .png/.jpg/.svg files — use inline SVG, CSS gradients, or https://images.unsplash.com/... URLs instead.
 
 DESIGN BRAIN (this is a UI/UX design lab — design quality is the product):
 - Craft production-grade, portfolio-worthy interfaces. Every screen must look intentionally designed, never generated.
@@ -201,13 +202,18 @@ export default function UiUxPlaygroundPage() {
         if (!res.ok) throw new Error(data.error || `Failed to create session (${res.status})`);
         const sid: string = data.session?.id;
         setSessionId(sid);
-        // Preview: ganti hostname supaya jalan dari host mana pun
-        // (localhost / LAN IP / Tailscale) — port sandbox tetap.
+        // Preview: pilih bentuk URL sesuai cara akses. Hostname IP
+        // (localhost/LAN/Tailscale) -> direct port (HMR jalan). Hostname
+        // domain via Cloudflare -> path /b/{port}/ (port non-standar tidak
+        // didukung proxy Cloudflare, iframe pakai path yang sama).
         const pv: string | undefined = data.session?.previewUrl;
+        const pvPath: string | undefined = data.session?.previewPath;
         if (pv) {
           const m = pv.match(/:(\d{4,5})\/?$/);
-          if (m) setPreviewUrl(`${window.location.protocol}//${window.location.hostname}:${m[1]}`);
-          else setPreviewUrl(pv);
+          const host = window.location.hostname;
+          const isDirect = host === "localhost" || host === "127.0.0.1" || /^\d+\.\d+\.\d+\.\d+$/.test(host);
+          if (isDirect && m) setPreviewUrl(`${window.location.protocol}//${host}:${m[1]}`);
+          else setPreviewUrl(pvPath || (m ? `/b/${m[1]}/` : pv));
         }
         eventsUrl = data.eventsUrl;
         terminalRef.current?.writeln(`\x1b[1;34m[sandbox] Session ${sid} — Docker sandbox + Vite dev server live\x1b[0m`);
