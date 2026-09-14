@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,8 @@ import {
   ChevronRight,
   ShieldCheck,
   Zap,
+  Menu,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,16 +38,12 @@ const navItems: NavItem[] = [
   { name: "Settings", href: "/lab/settings", icon: Settings },
 ];
 
-export default function Sidebar() {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const [activeItem, setActiveItem] = useState("/lab");
 
-  if (pathname === "/lab/experiments/ui-ux") {
-    return null;
-  }
-
   return (
-    <aside className="relative flex h-screen w-64 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all">
+    <>
       {/* Brand Header */}
       <div className="flex h-16 items-center gap-3 border-b border-zinc-200/80 px-6 dark:border-zinc-800/80">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 shadow-md shadow-blue-500/20 text-white">
@@ -75,7 +73,10 @@ export default function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              onClick={() => setActiveItem(item.href)}
+              onClick={() => {
+                setActiveItem(item.href);
+                onNavigate?.();
+              }}
               className={cn(
                 "group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200",
                 isActive
@@ -131,6 +132,76 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // Tutup drawer tiap pindah halaman.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // Escape buat nutup drawer.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (pathname === "/lab/experiments/ui-ux") {
+    return null;
+  }
+
+  return (
+    <>
+      {/* Desktop sidebar — tampilan lama, gak berubah */}
+      <aside className="relative hidden md:flex h-screen w-64 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile: hamburger + drawer */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Buka menu"
+        className="fixed left-3 top-3 z-40 flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200/80 bg-white/90 text-zinc-600 shadow-sm backdrop-blur-md transition-colors hover:bg-zinc-100 dark:border-zinc-800/80 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-800 md:hidden"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Backdrop */}
+      <div
+        onClick={() => setOpen(false)}
+        className={cn(
+          "fixed inset-0 z-40 bg-zinc-950/50 backdrop-blur-sm transition-opacity duration-300 md:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+      />
+
+      {/* Drawer */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-72 max-w-[85vw] flex-col border-r border-zinc-200/80 bg-white dark:border-zinc-800/80 dark:bg-zinc-950 shadow-2xl transition-transform duration-300 ease-out md:hidden",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Tutup menu"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <SidebarContent onNavigate={() => setOpen(false)} />
+      </aside>
+    </>
   );
 }

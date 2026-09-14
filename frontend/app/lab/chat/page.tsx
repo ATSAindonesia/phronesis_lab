@@ -13,13 +13,17 @@ import {
   Eraser,
   Square,
   CircleAlert,
+  Brain,
+  ChevronDown,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface ChatMsg {
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
 }
 
 interface ChatMeta {
@@ -30,6 +34,7 @@ interface ChatMeta {
 
 const STORAGE_KEY = "lab-chat-v1";
 const MAX_STORED = 100;
+const MAX_REASONING_STORED = 4000;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -54,10 +59,14 @@ function loadHistory(): ChatMsg[] {
 
 function saveHistory(msgs: ChatMsg[]) {
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(msgs.slice(-MAX_STORED))
-    );
+    const trimmed = msgs.slice(-MAX_STORED).map((m) => ({
+      ...m,
+      reasoning:
+        m.reasoning && m.reasoning.length > MAX_REASONING_STORED
+          ? m.reasoning.slice(0, MAX_REASONING_STORED) + "…"
+          : m.reasoning,
+    }));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
   } catch {
     // storage penuh / disabled — abaikan.
   }
@@ -82,7 +91,7 @@ function createSSEParser(onPayload: (payload: string) => void) {
   };
 }
 
-// ─── Inline markdown mini (bold, italic, inline code, code block) ───────────
+// ─── Inline markdown mini (bold, italic, inline code) ───────────────────────
 
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
@@ -152,6 +161,76 @@ function AssistantContent({ content }: { content: string }) {
   );
 }
 
+// ─── Thinking block (collapsible, smooth height) ────────────────────────────
+
+function ThinkingBlock({
+  reasoning,
+  active,
+}: {
+  reasoning: string;
+  active: boolean;
+}) {
+  // active = reasoning masih mengalir utk pesan ini.
+  const [userToggle, setUserToggle] = useState<boolean | null>(null);
+  const autoOpen = active && reasoning.length > 0;
+  const open = userToggle !== null ? userToggle : autoOpen;
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [maxH, setMaxH] = useState<number>(0);
+
+  useEffect(() => {
+    if (open && bodyRef.current) {
+      setMaxH(bodyRef.current.scrollHeight);
+    }
+  }, [open, reasoning]);
+
+  const label = active
+    ? "berpikir…"
+    : `berpikir selesai · ${reasoning.length} char`;
+
+  return (
+    <div className="lab-anim-in mb-3 overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-100/60 dark:border-zinc-800/80 dark:bg-zinc-900/50">
+      <button
+        type="button"
+        onClick={() => setUserToggle(!open)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+      >
+        <Brain
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            active ? "text-amber-500" : "text-zinc-400 dark:text-zinc-500"
+          )}
+        />
+        <span className={cn("min-w-0 flex-1 truncate", active && "lab-shimmer-text")}>
+          {label}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 transition-transform duration-300",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      <div
+        className="transition-[max-height,opacity] duration-300 ease-out"
+        style={{
+          maxHeight: open ? `${maxH}px` : "0px",
+          opacity: open ? 1 : 0,
+        }}
+      >
+        <div
+          ref={bodyRef}
+          className="max-h-64 overflow-y-auto border-t border-zinc-200/70 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-zinc-500 dark:border-zinc-800/70 dark:text-zinc-400"
+        >
+          {reasoning}
+          {active && (
+            <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-amber-500 align-text-bottom" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
@@ -212,7 +291,10 @@ export default function ChatPage() {
 
       setError(null);
       const history = [...messages, { role: "user" as const, content }];
-      setMessages([...history, { role: "assistant" as const, content: "" }]);
+      setMessages([
+        ...history,
+        { role: "assistant" as const, content: "", reasoning: "" },
+      ]);
       setInput("");
       setStreaming(true);
       requestAnimationFrame(autoResize);
@@ -245,15 +327,18 @@ export default function ChatPage() {
           if (payload === "[DONE]") return;
           try {
             const chunk = JSON.parse(payload) as {
-              choices?: { delta?: { content?: string } }[];
+              choices?: {
+                delta?: { content?: string; reasoning?: string };
+              }[];
               error?: string;
             };
             if (chunk.error) {
               setError(chunk.error);
               return;
             }
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
+            const delta = chunk.choices?.[0]?.delta;
+            if (!delta) return;
+            if (delta.content || delta.reasoning) {
               setMessages((prev) => {
                 if (prev.length === 0) return prev;
                 const next = [...prev];
@@ -261,7 +346,8 @@ export default function ChatPage() {
                 next[next.length - 1] = {
                   ...last,
                   role: "assistant",
-                  content: last.content + delta,
+                  content: last.content + (delta.content ?? ""),
+                  reasoning: (last.reasoning ?? "") + (delta.reasoning ?? ""),
                 };
                 return next;
               });
@@ -288,7 +374,9 @@ export default function ChatPage() {
         setStreaming(false);
         // Buang assistant bubble kosong kalau gak dapet apa-apa.
         setMessages((prev) =>
-          prev.length > 0 && prev[prev.length - 1].content === ""
+          prev.length > 0 &&
+          prev[prev.length - 1].content === "" &&
+          !prev[prev.length - 1].reasoning
             ? prev.slice(0, -1)
             : prev
         );
@@ -338,10 +426,10 @@ export default function ChatPage() {
       />
 
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between border-b border-zinc-200/80 bg-white/70 px-4 py-3 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60 sm:px-6">
+      <header className="relative z-10 flex items-center justify-between border-b border-zinc-200/80 bg-white/70 py-3 pl-16 pr-4 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60 sm:px-6">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <FlaskConical className="h-4.5 w-4.5" />
+            <FlaskConical className="h-4 w-4" />
           </div>
           <div>
             <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -380,7 +468,7 @@ export default function ChatPage() {
       <div className="relative z-10 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
           {messages.length === 0 && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-6 py-16 text-center">
+            <div className="lab-anim-in flex flex-1 flex-col items-center justify-center gap-6 py-16 text-center">
               <div className="font-mono text-5xl text-amber-500/70 dark:text-amber-400/60">
                 {"{ }"}
               </div>
@@ -398,7 +486,7 @@ export default function ChatPage() {
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    className="rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs text-zinc-600 transition hover:border-amber-400/60 hover:text-amber-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
+                    className="rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs text-zinc-600 transition hover:border-amber-400/60 hover:text-amber-700 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
                   >
                     {s}
                   </button>
@@ -409,18 +497,28 @@ export default function ChatPage() {
 
           {messages.map((m, i) =>
             m.role === "user" ? (
-              <div key={i} className="flex justify-end">
+              <div key={i} className="lab-anim-up flex justify-end">
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-zinc-900 px-4 py-2.5 text-sm leading-relaxed text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900">
                   {m.content}
                 </div>
               </div>
             ) : (
-              <div key={i} className="flex gap-3">
+              <div key={i} className="lab-anim-up flex gap-3">
                 <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 font-mono text-[10px] font-bold text-amber-600 dark:text-amber-400">
                   AI
                 </div>
                 <div className="min-w-0 flex-1 border-l-2 border-amber-400/40 pl-3 text-sm text-zinc-800 dark:border-amber-500/30 dark:text-zinc-200">
-                  <AssistantContent content={m.content} />
+                  {m.reasoning ? (
+                    <ThinkingBlock
+                      reasoning={m.reasoning}
+                      active={
+                        streaming && i === messages.length - 1 && !m.content
+                      }
+                    />
+                  ) : null}
+                  {m.content ? (
+                    <AssistantContent content={m.content} />
+                  ) : null}
                   {streaming &&
                     i === messages.length - 1 &&
                     m.content !== "" && (
@@ -437,7 +535,7 @@ export default function ChatPage() {
       {/* Error */}
       {error && (
         <div className="relative z-10 mx-auto w-full max-w-3xl px-4 sm:px-6">
-          <div className="mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+          <div className="lab-anim-in mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
             <CircleAlert className="h-4 w-4 shrink-0" />
             <span className="min-w-0 flex-1">{error}</span>
             <button
@@ -451,7 +549,10 @@ export default function ChatPage() {
       )}
 
       {/* Input dock */}
-      <div className="relative z-10 border-t border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60">
+      <div
+        className="relative z-10 border-t border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
           <div className="flex items-end gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-sm transition focus-within:border-amber-400/70 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-amber-500/50">
             <textarea
@@ -464,13 +565,13 @@ export default function ChatPage() {
               onKeyDown={onKeyDown}
               rows={1}
               placeholder="Tanya apa aja ke lab…"
-              className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500"
+              className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:text-sm"
             />
             {streaming ? (
               <button
                 onClick={stop}
                 title="Stop"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 transition hover:bg-zinc-700 active:scale-90 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </button>
@@ -479,13 +580,13 @@ export default function ChatPage() {
                 onClick={() => send(input)}
                 disabled={!input.trim()}
                 title="Kirim (Enter)"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-600 active:scale-90 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
               >
                 <ArrowUp className="h-4 w-4" />
               </button>
             )}
           </div>
-          <p className="mt-1.5 px-1 text-center font-mono text-[10px] text-zinc-400 dark:text-zinc-600">
+          <p className="mt-1.5 hidden px-1 text-center font-mono text-[10px] text-zinc-400 dark:text-zinc-600 sm:block">
             enter kirim · shift+enter baris baru · riwayat: localStorage
           </p>
         </div>

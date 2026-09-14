@@ -14,7 +14,7 @@ export default function Header({
   subtitle = "Phronesis Workspace",
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-zinc-200/80 bg-white/80 px-6 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-zinc-200/80 bg-white/80 pl-16 pr-4 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80 md:px-6">
       {/* Title & Status */}
       <div className="flex items-center gap-3">
         <div>
@@ -27,7 +27,7 @@ export default function Header({
               Live
             </span>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{subtitle}</p>
+          <p className="hidden text-xs text-zinc-500 sm:block dark:text-zinc-400">{subtitle}</p>
         </div>
       </div>
 
@@ -55,14 +55,14 @@ export default function Header({
         {/* Notifications */}
         <button
           type="button"
-          className="relative rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900 transition-colors"
+          className="relative hidden rounded-full p-2 text-zinc-500 hover:bg-zinc-100 sm:block dark:text-zinc-400 dark:hover:bg-zinc-900 transition-colors"
           aria-label="Notifications"
         >
           <Bell className="h-4 w-4" />
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-zinc-950" />
         </button>
 
-        <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+        <div className="hidden h-4 w-px bg-zinc-200 sm:block dark:bg-zinc-800" />
 
         {/* User profile & Logout */}
         <div className="flex items-center gap-3">
