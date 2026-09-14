@@ -429,7 +429,7 @@ func runTurn(ctx context.Context, s *Session, llm llmConfig, userPrompt string) 
 		s.emitSummary("sandbox ready · preview live")
 	}
 
-	msgs := []oaiMsg{{Role: "system", Content: systemPrompt}}
+	msgs := []oaiMsg{{Role: "system", Content: s.SystemPrompt}}
 	for _, h := range s.getHistory() {
 		msgs = append(msgs, oaiMsg{Role: h.Role, Content: h.Content})
 	}
@@ -498,7 +498,7 @@ func (st *streamState) apply(a boltAction) {
 			s.emitError("blocked path: " + a.Path)
 			return
 		}
-		s.emitToolUse("write_file", map[string]interface{}{"path": a.Path, "bytes": len(a.Body)})
+		s.emitToolUse("write_file", map[string]interface{}{"path": a.Path, "bytes": len(a.Body), "content": a.Body})
 		s.emitSummary("write " + a.Path)
 		if err := writeFileOnHost(s, a.Path, a.Body); err != nil {
 			s.emitError("write " + a.Path + ": " + err.Error())

@@ -85,6 +85,8 @@ func (st *Store) Create(user, email, name string) (*Session, error) {
 		LastAct:   time.Now(),
 		status:    "ready",
 		history:   nil,
+
+		SystemPrompt: systemPrompt,
 	}
 	st.mu.Lock()
 	st.items[id] = s

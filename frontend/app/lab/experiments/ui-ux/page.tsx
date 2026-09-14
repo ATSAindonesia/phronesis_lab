@@ -25,17 +25,47 @@ import { cn } from "@/lib/utils";
 import SandboxPreview, { ProjectFile, GeneratingStatus } from "./components/sandbox-preview";
 import TerminalView, { TerminalRef } from "./components/terminal-view";
 import LogoutButton from "../../logout-button";
-import {
-  getWebContainer,
-  writeContainerFile,
-  spawnCommand,
-  checkCrossOriginIsolation,
-  starterFiles,
-} from "./lib/webcontainer";
-import {
-  StreamingActionParser,
-  BoltAction,
-} from "./lib/action-parser";
+import { starterFiles } from "./lib/webcontainer";
+
+// Agent action trace (dari event builder API, bukan parser lokal).
+interface AgentActionTrace {
+  id: string;
+  type: "file" | "shell" | "text";
+  filePath?: string;
+  content: string;
+  status: "streaming" | "complete";
+}
+
+// System prompt khusus UI/UX design lab — dikirim sebagai agent_config ke
+// builder API supaya agent punya "design brain" (bolt.new untuk design).
+const DESIGN_SYSTEM_PROMPT = `You are an elite UI/UX design engineer agent (like bolt.new specialized for design) building web apps inside a server-side Docker sandbox running Vite + React + Tailwind CSS.
+
+Respond with a short plan sentence, then exactly ONE <boltArtifact> XML block containing <boltAction> children.
+
+FORMAT (strict):
+<boltArtifact id="app" title="Short description">
+  <boltAction type="file" filePath="src/App.tsx">
+...complete file content...
+  </boltAction>
+  <boltAction type="shell">
+npm install framer-motion
+  </boltAction>
+</boltArtifact>
+
+RULES:
+- filePath relative to project root. Allowed: src/..., public/..., index.html. NEVER emit package.json, vite.config.js, node_modules, package-lock.json.
+- File actions REPLACE the file entirely — re-output the WHOLE file when editing.
+- The Vite dev server is ALREADY RUNNING with HMR. NEVER emit npm run dev / vite / npm create. Preinstalled: react, react-dom, lucide-react, clsx, tailwind-merge. Only shell-install NEW packages you really need.
+- Stack: React 18 + Tailwind CSS v4 (wired via src/index.css @import "tailwindcss";). Entry src/App.tsx MUST export default a component; src/main.tsx renders <App/>.
+- Output code that COMPILES: valid TSX, complete files, no placeholders, no TODO stubs, no markdown fences. No text after </boltArtifact>.
+
+DESIGN BRAIN (this is a UI/UX design lab — design quality is the product):
+- Craft production-grade, portfolio-worthy interfaces. Every screen must look intentionally designed, never generated.
+- Strong typographic hierarchy (display sizes, tight tracking for headings, generous line-height for body), 8pt spacing rhythm, max-w containers (~1240px), generous whitespace.
+- Harmonious palettes: pick ONE intentional palette per request (stone/amber minimal, zinc/emerald tech, warm editorial, etc.) — avoid default blue/purple AI slop. Support dark mode via Tailwind dark: classes when it fits.
+- Micro-interactions: hover/active/focus states, smooth transitions (transition-colors/duration-200), subtle motion only where it adds meaning.
+- Responsive by default: mobile-first, scoped breakpoints, no horizontal overflow.
+- Use lucide-react icons instead of emoji. Real content over lorem ipsum. Empty states and loading states designed, not left blank.`;
 
 const initialDefaultFiles: Record<string, ProjectFile> = {
   "src/App.tsx": {
@@ -102,15 +132,16 @@ export default function UiUxPlaygroundPage() {
   const [activitySubTab, setActivitySubTab] = useState<"terminal" | "actions">("terminal");
   const [viewportSize, setViewportSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
-  // 4. WebContainer & Dev Server State
+  // 4. Server Sandbox & Dev Server State (builder API — WebContainer dihapus)
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isBooting, setIsBooting] = useState<boolean>(true);
-  const [bootMessage, setBootMessage] = useState<string>("Initializing WebContainer runtime...");
+  const [isBooting, setIsBooting] = useState<boolean>(false);
+  const [bootMessage, setBootMessage] = useState<string>("Server sandbox ready");
   const [liveLog, setLiveLog] = useState<string>("");
 
   // 5. Agent Telemetry State
   const [agentThought, setAgentThought] = useState<string | null>(null);
-  const [agentActions, setAgentActions] = useState<BoltAction[]>([]);
+  const [agentActions, setAgentActions] = useState<AgentActionTrace[]>([]);
   const [recentModifiedFiles, setRecentModifiedFiles] = useState<string[]>([]);
   const [expandedActionIndex, setExpandedActionIndex] = useState<number | null>(null);
   const [generatingStatus, setGeneratingStatus] = useState<GeneratingStatus>({
@@ -123,96 +154,8 @@ export default function UiUxPlaygroundPage() {
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<TerminalRef | null>(null);
 
-  // Boot WebContainer, install dependencies, and launch Vite dev server
-  useEffect(() => {
-    let isMounted = true;
+  // Server sandbox: tidak perlu boot — sesi builder dibuat lazily saat prompt pertama.
 
-    async function initWebContainer() {
-      if (!checkCrossOriginIsolation()) {
-        setIsBooting(false);
-        setBootMessage("Cross-Origin Isolation required for WebContainer.");
-        return;
-      }
-
-      try {
-        setBootMessage("Booting in-browser WebContainer (Node.js/Wasm)...");
-        terminalRef.current?.writeln("\x1b[1;34m[fs] Booting WebContainer virtual micro-OS...\x1b[0m");
-
-        const container = await getWebContainer();
-        if (!isMounted) return;
-
-        terminalRef.current?.writeln("\x1b[1;32m[fs] Virtual filesystem mounted.\x1b[0m");
-
-        // 1. Listen for internal dev server port ready BEFORE spawning commands
-        container.on("server-ready", (port, url) => {
-          if (!isMounted) return;
-          terminalRef.current?.writeln(`\x1b[1;32m[vite] Dev server ready at ${url} (port ${port})\x1b[0m`);
-          setPreviewUrl(url);
-          setIsBooting(false);
-        });
-
-        // 2. Install project dependencies first so node_modules exists
-        setBootMessage("Installing project dependencies (npm install)...");
-        terminalRef.current?.writeln("\x1b[1;33m[npm] Installing packages: react, react-dom, vite...\x1b[0m");
-
-        const installExitCode = await spawnCommand(
-          "npm",
-          ["install", "--no-audit", "--no-fund", "--prefer-offline"],
-          (chunk) => {
-            terminalRef.current?.write(chunk);
-            const line = chunk.trim();
-            if (line) setLiveLog(line);
-          }
-        );
-
-        if (!isMounted) return;
-
-        if (installExitCode !== 0) {
-          terminalRef.current?.writeln(`\x1b[1;31m[err] npm install exited with code ${installExitCode}\x1b[0m`);
-          setBootMessage(`npm install failed (exit code ${installExitCode}). Check terminal logs.`);
-          setIsBooting(false);
-          return;
-        }
-
-        terminalRef.current?.writeln("\x1b[1;32m[npm] Dependencies installed successfully.\x1b[0m");
-
-        // 3. Launch Vite dev server directly via npm run dev
-        setBootMessage("Starting Vite development server...");
-        terminalRef.current?.writeln("\x1b[1;36m[vite] Starting dev server (npm run dev)...\x1b[0m");
-
-        const devExitCode = await spawnCommand(
-          "npm",
-          ["run", "dev", "--", "--host"],
-          (chunk) => {
-            terminalRef.current?.write(chunk);
-            const line = chunk.trim();
-            if (line) setLiveLog(line);
-          }
-        );
-
-        if (!isMounted) return;
-
-        if (devExitCode !== 0) {
-          terminalRef.current?.writeln(`\x1b[1;31m[err] Dev server exited with code ${devExitCode}\x1b[0m`);
-          setBootMessage(`Vite dev server exited with code ${devExitCode}. Check terminal.`);
-          setIsBooting(false);
-        }
-
-      } catch (err: unknown) {
-        if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setBootMessage(`WebContainer boot failed: ${msg}`);
-        terminalRef.current?.writeln(`\x1b[1;31m[err] Boot failed: ${msg}\x1b[0m`);
-        setIsBooting(false);
-      }
-    }
-
-    initWebContainer();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const activeFile = files[activeFileName] || Object.values(files)[0];
   const contentLines = (activeFile?.content || "").split("\n");
@@ -223,14 +166,12 @@ export default function UiUxPlaygroundPage() {
     }
   };
 
-  // Connected Streaming AI Generation Handler (Bolt-style SSE stream)
+  // Server-sandbox generation: builder API (docker) + SSE events.
+  // Alur: prompt -> /api/builder/sessions (atau messages) -> agent events
+  // (write_file/bash) -> sandbox Vite HMR -> live preview iframe.
   const handleGenerate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
-
-    if (isBooting || !previewUrl) {
-      terminalRef.current?.writeln("\x1b[1;33m[agent] WebContainer is initializing. Ready in a few seconds...\x1b[0m");
-    }
 
     const userPrompt = prompt.trim();
     setIsGenerating(true);
@@ -239,211 +180,122 @@ export default function UiUxPlaygroundPage() {
     setPrompt("");
     setGeneratingStatus({
       step: "connecting",
-      message: "Connecting to autonomous coding agent...",
+      message: "Connecting to design agent (server sandbox)...",
     });
 
     terminalRef.current?.writeln(`\r\n\x1b[1;33m[agent] Prompt: "${userPrompt}"\x1b[0m`);
 
-    const parser = new StreamingActionParser({
-      onArtifactStart: ({ title }) => {
-        terminalRef.current?.writeln(`\x1b[1;34m[agent] Building artifact: ${title}\x1b[0m`);
-        setGeneratingStatus({
-          step: "streaming",
-          message: `Building Artifact: ${title}`,
-        });
-      },
-      onActionStart: (action) => {
-        if (action.type === "file" && action.filePath) {
-          const path = action.filePath;
-          terminalRef.current?.writeln(`\x1b[1;36m[fs] Streaming file: ${path}...\x1b[0m`);
-
-          setFiles((prev) => ({
-            ...prev,
-            [path]: {
-              name: path,
-              language: path.endsWith(".css") ? "css" : "typescript",
-              content: "",
-            },
-          }));
-          setActiveFileName(path);
-          setRecentModifiedFiles((prev) => (prev.includes(path) ? prev : [...prev, path]));
-          setGeneratingStatus({
-            step: "streaming",
-            message: `Writing ${path}...`,
-            filePath: path,
-            linesCount: 1,
-          });
-        } else if (action.type === "shell") {
-          terminalRef.current?.writeln(`\x1b[1;33m[shell] Preparing command: ${action.content || "..."}\x1b[0m`);
-          setGeneratingStatus({
-            step: "streaming",
-            message: `Shell: ${action.content || "preparing..."}`,
-          });
-        }
-
-        setAgentActions((prev) => [...prev, action]);
-      },
-      onActionStream: (action, delta) => {
-        if (action.type === "file" && action.filePath) {
-          const path = action.filePath;
-          setFiles((prev) => {
-            const existing = prev[path];
-            return {
-              ...prev,
-              [path]: {
-                name: path,
-                language: path.endsWith(".css") ? "css" : "typescript",
-                content: (existing?.content || "") + delta,
-              },
-            };
-          });
-          const count = (action.content.match(/\n/g) || []).length + 1;
-          setGeneratingStatus((prev) => ({
-            ...prev,
-            linesCount: count,
-          }));
-        }
-      },
-      onActionComplete: async (action) => {
-        if (action.type === "file" && action.filePath) {
-          const path = action.filePath;
-          setGeneratingStatus({
-            step: "applying",
-            message: `Applying ${path} to WebContainer...`,
-            filePath: path,
-          });
-          // Update React files state with the finalized clean code
-          setFiles((prev) => ({
-            ...prev,
-            [path]: {
-              name: path,
-              language: path.endsWith(".css") ? "css" : "typescript",
-              content: action.content,
-            },
-          }));
-          try {
-            await writeContainerFile(path, action.content);
-            terminalRef.current?.writeln(`\x1b[1;32m[ok] Applied ${path} to WebContainer (HMR updated)\x1b[0m`);
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            terminalRef.current?.writeln(`\x1b[1;31m[err] Failed writing ${path}: ${msg}\x1b[0m`);
-          }
-        } else if (action.type === "shell") {
-          const commandLine = action.content.trim();
-          if (commandLine) {
-            terminalRef.current?.writeln(`\x1b[1;33m$ ${commandLine}\x1b[0m`);
-            const parts = commandLine.split(" ").filter(Boolean);
-            const cmd = parts[0];
-            const args = parts.slice(1);
-            try {
-              await spawnCommand(cmd, args, (chunk) => {
-                terminalRef.current?.write(chunk);
-              });
-              terminalRef.current?.writeln(`\x1b[1;32m[ok] Command completed: ${commandLine}\x1b[0m`);
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : String(err);
-              terminalRef.current?.writeln(`\x1b[1;31m[err] Command failed: ${msg}\x1b[0m`);
-            }
-          }
-        }
-
-        setAgentActions((prev) =>
-          prev.map((a) => (a.id === action.id ? { ...a, status: "complete", content: action.content } : a))
-        );
-      },
-      onThought: (thought) => {
-        setAgentThought(thought);
-      },
-      onArtifactComplete: () => {
-        terminalRef.current?.writeln(`\x1b[1;32m[ok] Artifact finished successfully.\x1b[0m`);
-      },
-    });
-
     try {
-      const res = await fetch("/api/experiments/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-        },
-        body: JSON.stringify({
-          prompt: userPrompt,
-          files,
-          stream: true,
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(errText || `Server responded with status ${res.status}`);
-      }
-
-      if (!res.body) {
-        throw new Error("Streaming body not available in response.");
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let streamBuffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        streamBuffer += decoder.decode(value, { stream: true });
-        const lines = streamBuffer.split("\n");
-        streamBuffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("data:")) {
-            const dataContent = trimmed.slice(5).trim();
-            if (dataContent === "[DONE]" || !dataContent) continue;
-
-            try {
-              const parsed = JSON.parse(dataContent);
-              if (parsed.text) {
-                parser.feed(parsed.text);
-              }
-              if (parsed.thought) {
-                setAgentThought((prev) => (prev ? prev + parsed.thought : parsed.thought));
-              }
-              if (parsed.phase === "generating") {
-                setGeneratingStatus({
-                  step: "thinking",
-                  message: "Agent synthesizing UI components & architecture...",
-                });
-              }
-              if (parsed.status === "alive") {
-                if (parsed.elapsed) {
-                  setGeneratingStatus((prev) => ({
-                    ...prev,
-                    step: "thinking",
-                    elapsedSeconds: parsed.elapsed,
-                    message: `Agent reasoning & designing architecture (${parsed.elapsed}s)...`,
-                  }));
-                }
-                continue;
-              }
-              if (parsed.error) {
-                setErrorMessage(parsed.error);
-                terminalRef.current?.writeln(`\x1b[1;31m[err] Agent error: ${parsed.error}\x1b[0m`);
-              }
-            } catch {
-              // Raw text chunk
-              parser.feed(dataContent);
-            }
-          }
+      // 1. Buat sesi (pertama) atau lanjutkan sesi (berikutnya).
+      let eventsUrl: string | undefined;
+      if (!sessionId) {
+        const res = await fetch("/api/builder/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: userPrompt,
+            agent_config: { system_prompt: DESIGN_SYSTEM_PROMPT },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Failed to create session (${res.status})`);
+        const sid: string = data.session?.id;
+        setSessionId(sid);
+        // Preview: ganti hostname supaya jalan dari host mana pun
+        // (localhost / LAN IP / Tailscale) — port sandbox tetap.
+        const pv: string | undefined = data.session?.previewUrl;
+        if (pv) {
+          const m = pv.match(/:(\d{4,5})\/?$/);
+          if (m) setPreviewUrl(`${window.location.protocol}//${window.location.hostname}:${m[1]}`);
+          else setPreviewUrl(pv);
         }
+        eventsUrl = data.eventsUrl;
+        terminalRef.current?.writeln(`\x1b[1;34m[sandbox] Session ${sid} — Docker sandbox + Vite dev server live\x1b[0m`);
+        setBootMessage("Server sandbox live");
+      } else {
+        const res = await fetch(`/api/builder/sessions/${sessionId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: userPrompt }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Failed to send message (${res.status})`);
+        eventsUrl = `/api/builder/sessions/${sessionId}/events?api_key=lab-local`;
       }
 
-      parser.finish();
-      setGeneratingStatus({
-        step: "ready",
-        message: "Application updated successfully!",
+      // 2. Stream agent events via SSE (EventSource butuh api_key di query).
+      await new Promise<void>((resolve, reject) => {
+        const es = new EventSource(eventsUrl!);
+        const timer = setTimeout(() => { es.close(); resolve(); }, 600_000); // hard cap 10 menit
+        es.onmessage = (ev) => {
+          if (!ev.data || ev.data === "[DONE]") return;
+          let parsed: {
+            type?: string;
+            message?: { content?: Array<{ type?: string; text?: string; name?: string; input?: { path?: string; content?: string; command?: string } }> };
+            tool?: string;
+            error?: string;
+          };
+          try { parsed = JSON.parse(ev.data); } catch { return; }
+
+          if (parsed.type === "ready" || parsed.type === "configured") return;
+
+          if (parsed.type === "assistant" && parsed.message?.content) {
+            for (const block of parsed.message.content) {
+              if (block.type === "text" && block.text) {
+                const text = block.text;
+                setAgentThought((prev) => (prev ? `${prev}\n${text}` : text));
+                terminalRef.current?.writeln(`\x1b[90m[agent] ${block.text}\x1b[0m`);
+              } else if (block.type === "tool_use" && block.name === "write_file" && block.input?.path) {
+                const path = block.input.path;
+                const content = block.input.content ?? "";
+                setFiles((prev) => ({
+                  ...prev,
+                  [path]: {
+                    name: path,
+                    language: path.endsWith(".css") ? "css" : path.endsWith(".html") ? "html" : path.endsWith(".json") ? "json" : "typescript",
+                    content,
+                  },
+                }));
+                setActiveFileName(path);
+                setRecentModifiedFiles((prev) => (prev.includes(path) ? prev : [...prev, path]));
+                setAgentActions((prev) => [
+                  ...prev,
+                  { id: `${Date.now()}-${path}`, type: "file", filePath: path, content, status: "complete" },
+                ]);
+                setGeneratingStatus({ step: "applying", message: `Wrote ${path} to sandbox`, filePath: path });
+                terminalRef.current?.writeln(`\x1b[1;32m[ok] ${path} → sandbox (HMR live)\x1b[0m`);
+              } else if (block.type === "tool_use" && block.name === "bash" && block.input?.command) {
+                const cmd = block.input.command;
+                setAgentActions((prev) => [
+                  ...prev,
+                  { id: `${Date.now()}-sh`, type: "shell", content: cmd, status: "complete" },
+                ]);
+                setGeneratingStatus({ step: "streaming", message: `Shell: ${cmd}` });
+                terminalRef.current?.writeln(`\x1b[1;33m$ ${cmd}\x1b[0m`);
+              }
+            }
+          } else if (parsed.type === "tool_use_summary" && parsed.tool) {
+            setLiveLog(parsed.tool);
+          } else if (parsed.type === "error" && parsed.error) {
+            setErrorMessage(parsed.error);
+            terminalRef.current?.writeln(`\x1b[1;31m[err] ${parsed.error}\x1b[0m`);
+          } else if (parsed.type === "turn_complete") {
+            clearTimeout(timer);
+            es.close();
+            resolve();
+          }
+        };
+        es.onerror = () => {
+          // Backend menutup stream setelah turn selesai; anggap selesai.
+          clearTimeout(timer);
+          es.close();
+          resolve();
+        };
       });
+
+      setGeneratingStatus({ step: "ready", message: "Design updated — live preview refreshed!" });
       setPreviewRefreshKey((k) => k + 1);
-      terminalRef.current?.writeln(`\x1b[1;32m[ok] Agent generation complete.\x1b[0m\r\n`);
+      terminalRef.current?.writeln(`\x1b[1;32m[ok] Agent turn complete.\x1b[0m\r\n`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
@@ -470,17 +322,13 @@ export default function UiUxPlaygroundPage() {
     setAgentActions([]);
     setRecentModifiedFiles([]);
 
-    // Reset files in WebContainer
-    try {
-      await writeContainerFile(
-        "src/App.tsx",
-        (starterFiles.src as { directory: Record<string, { file: { contents: string } }> })
-          .directory["App.tsx"].file.contents
-      );
-      terminalRef.current?.writeln("\x1b[1;33m[fs] Workspace reset to starter template.\x1b[0m");
-    } catch {
-      // Ignore
-    }
+    // Reset: buang sesi sandbox (container di-reap oleh backend), mulai baru
+    // pada prompt berikutnya.
+    setSessionId(null);
+    setPreviewUrl(null);
+    setBootMessage("Server sandbox ready");
+    setFiles(initialDefaultFiles);
+    terminalRef.current?.writeln("\x1b[1;33m[fs] Session reset — sandbox baru akan dibuat saat prompt berikutnya.\x1b[0m");
   };
 
   const handleSwitchToFile = (fileName: string) => {
@@ -531,7 +379,7 @@ export default function UiUxPlaygroundPage() {
                 </span>
               </div>
               <span className="font-mono text-[11px] leading-relaxed text-stone-500 dark:text-zinc-400">
-                {generatingStatus.message || "Streaming code changes to the WebContainer runtime..."}
+                {generatingStatus.message || "Streaming code changes to the server sandbox..."}
               </span>
               {generatingStatus.filePath && (
                 <span className="font-mono text-[11px] text-stone-700 dark:text-zinc-300">
@@ -603,7 +451,7 @@ export default function UiUxPlaygroundPage() {
               disabled={isGenerating || isBooting}
               placeholder={
                 isBooting
-                  ? "Booting WebContainer environment..."
+                  ? "Preparing server sandbox..."
                   : isGenerating
                   ? generatingStatus.message || "Streaming..."
                   : "Instruct the agent to build or modify UI..."
@@ -670,7 +518,7 @@ export default function UiUxPlaygroundPage() {
                   Coding Agent Workspace
                 </h1>
                 <span className="hidden shrink-0 items-center gap-1 rounded-md border border-stone-200 px-1.5 py-0.5 font-mono text-[11px] font-medium text-stone-500 dark:border-zinc-700 dark:text-zinc-400 sm:inline-flex">
-                  WebContainer Wasm
+                  Docker Sandbox
                 </span>
               </div>
               <p className="truncate max-w-[280px] text-[11px] text-stone-500 dark:text-zinc-400 sm:max-w-md">
@@ -863,7 +711,7 @@ export default function UiUxPlaygroundPage() {
           {/* Workspace Display Area */}
           <div className="flex min-h-0 w-full flex-1 items-stretch justify-center overflow-hidden bg-stone-200/50 dark:bg-zinc-950">
             {viewMode === "preview" ? (
-              /* Live WebContainer Preview */
+              /* Live Sandbox Preview (iframe ke dev server di Docker) */
               <div
                 className={cn(
                   "h-full w-full overflow-hidden",

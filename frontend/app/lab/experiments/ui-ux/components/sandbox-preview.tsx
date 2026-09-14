@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  AlertCircle,
   RefreshCw,
   ExternalLink,
   Globe,
@@ -11,7 +10,6 @@ import {
   FileCode2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { checkCrossOriginIsolation } from "../lib/webcontainer";
 
 export interface ProjectFile {
   name: string;
@@ -58,11 +56,6 @@ export default function SandboxPreview({
 }: SandboxPreviewProps) {
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isIsolated, setIsIsolated] = useState<boolean>(true);
-
-  useEffect(() => {
-    setIsIsolated(checkCrossOriginIsolation());
-  }, []);
 
   // Reload iframe whenever external keyTrigger changes (e.g. file applied or generation complete)
   useEffect(() => {
@@ -117,31 +110,8 @@ export default function SandboxPreview({
 
       {/* ─── Main Preview Surface ─── */}
       <div className="relative h-full w-full flex-1 overflow-hidden bg-white dark:bg-zinc-900">
-        {/* Cross-Origin Isolation Warning if headers blocked */}
-        {!isIsolated && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-stone-100 p-6 dark:bg-zinc-950">
-            <div className="w-full max-w-md rounded-xl border border-amber-600/40 bg-white p-5 text-stone-700 shadow-lg shadow-black/10 dark:border-amber-400/40 dark:bg-zinc-900 dark:text-zinc-300">
-              <div className="mb-2.5 flex items-center gap-2.5">
-                <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-                <h3 className="text-sm font-medium text-stone-900 dark:text-zinc-50">Cross-Origin Isolation Required</h3>
-              </div>
-              <p className="text-xs leading-relaxed text-stone-600 dark:text-zinc-400">
-                WebContainers require <code className="rounded border border-stone-200 bg-stone-50 px-1 py-0.5 font-mono text-[11px] dark:border-zinc-800 dark:bg-zinc-950">Cross-Origin-Opener-Policy: same-origin</code> and <code className="rounded border border-stone-200 bg-stone-50 px-1 py-0.5 font-mono text-[11px] dark:border-zinc-800 dark:bg-zinc-950">Cross-Origin-Embedder-Policy</code> headers to run Node.js in your browser.
-              </p>
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() => window.location.reload()}
-                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 cursor-pointer"
-                >
-                  Hard Refresh Page
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Booting / Dev Server Starting Indicator */}
-        {(isBooting || !previewUrl) && isIsolated && (
+        {(isBooting || !previewUrl) && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-stone-50 p-6 text-center dark:bg-zinc-950">
             <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-zinc-700 dark:border-t-amber-400" />
@@ -150,7 +120,7 @@ export default function SandboxPreview({
               {bootMessage}
             </h4>
             <p className="mt-1.5 max-w-xs text-[11px] font-medium text-stone-500 dark:text-zinc-400">
-              Initializing WebContainer virtual filesystem and launching Vite development server...
+              Server sandbox (Docker + Vite) is preparing your live preview...
             </p>
 
             {/* Live Terminal Log Snippet */}

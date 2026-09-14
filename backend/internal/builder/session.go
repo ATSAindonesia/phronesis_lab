@@ -96,6 +96,8 @@ type Session struct {
 	CreatedAt time.Time
 	LastAct   time.Time
 
+	SystemPrompt string // per-session override; defaults to the builder const
+
 	mu        sync.Mutex
 	status    string
 	history   []historyMsg

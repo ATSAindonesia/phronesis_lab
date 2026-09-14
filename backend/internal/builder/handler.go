@@ -43,6 +43,11 @@ func (st *Store) hCreate(w http.ResponseWriter, r *http.Request) {
 		UserID string `json:"user_id"`
 		Email  string `json:"user_email"`
 		Name   string `json:"user_name"`
+		// AgentConfig lets a specialized frontend (e.g. UI/UX design lab)
+		// override the agent's system prompt for this session.
+		AgentConfig struct {
+			SystemPrompt string `json:"system_prompt"`
+		} `json:"agent_config"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid request body")
@@ -59,6 +64,9 @@ func (st *Store) hCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if sp := strings.TrimSpace(body.AgentConfig.SystemPrompt); sp != "" {
+		s.SystemPrompt = sp
 	}
 	s.emit(AgentEvent{Type: "ready"})
 	st.QueueTurn(s, body.Prompt)
