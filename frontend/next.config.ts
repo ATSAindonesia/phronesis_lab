@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    // /lab/builder diganti jadi /lab/chat (builder backend tetap hidup
+    // buat experiment ui-ux).
+    return [
+      { source: "/lab/builder", destination: "/lab/chat", permanent: false },
+    ];
+  },
   async rewrites() {
     // Preview sandbox builder: /b/{port}/* -> backend Go (yang meneruskan
     // ke container Vite). Host-relative, jadi iframe jalan dari host mana pun.

@@ -7,11 +7,12 @@ import Header from "./header";
 export default function LabShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isUiUxPage = pathname === "/lab/experiments/ui-ux";
+  const isChatPage = pathname === "/lab/chat";
 
-  if (isUiUxPage) {
-    // For UI/UX experiment page:
-    // The header is integrated directly as part of the UI/UX experiment,
-    // maximizing screen space for the sandbox preview.
+  if (isUiUxPage || isChatPage) {
+    // Fullscreen pages (UI/UX experiment + chat):
+    // The header is integrated directly as part of the page itself,
+    // maximizing screen space.
     return (
       <div className="flex flex-1 flex-col overflow-hidden min-w-0 h-full w-full">
         {children}
