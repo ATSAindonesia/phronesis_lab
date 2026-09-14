@@ -28,9 +28,9 @@ func llmFromEnv() llmConfig {
 	c := llmConfig{
 		BaseURL: getenvOr("BUILDER_LLM_BASE_URL", getenvOr("LLM_BASE_URL", getenvOr("OPENAI_BASE_URL", "https://api.tokenportal.id/v1"))),
 		APIKey:  getenvOr("BUILDER_LLM_API_KEY", getenvOr("LLM_API_KEY", os.Getenv("HERMES_CUSTOM_API_TOKENPORTAL_ID_API_KEY"))),
-		Model:   getenvOr("BUILDER_LLM_MODEL", getenvOr("LLM_MODEL", "qwen3-coder")),
+		Model:   getenvOr("BUILDER_LLM_MODEL", getenvOr("LLM_MODEL", "qwen-3.8-flash")),
 	}
-	c.Falls = []string{c.Model, "gemini-38-flash", "deepseek-v4-flash", "glm-53-flash"}
+	c.Falls = []string{c.Model}
 	return c
 }
 
@@ -51,7 +51,8 @@ type oaiMsg struct {
 func (c llmConfig) chatStream(ctx context.Context, msgs []oaiMsg, onDelta func(string)) (string, error) {
 	var lastErr error
 	seen := map[string]bool{}
-	for _, model := range append(c.Falls, "qwen-3.8-flash", "glm-52-flash", "kimi-k3") {
+	// Hanya model yang dikonfigurasi — tanpa fallback ke model lain.
+	for _, model := range c.Falls {
 		if model == "" || seen[model] {
 			continue
 		}
@@ -134,7 +135,7 @@ func (c llmConfig) tryModel(ctx context.Context, model string, msgs []oaiMsg, on
 	// corrupting generated code (bg-gray-900 -> bg-gray-, useState(0) ->
 	// useState()). Non-streaming responses are intact. If suspicious, redo
 	// the call unstreamed (up to 2 attempts); if still bad, error out so
-	// chatStream fails over to the next model (gemini-38-flash streams clean).
+	// chatStream retries the same configured model on transient stream errors.
 	if numberChunks > 0 || looksChopped(sb.String()) {
 		streamed := sb.String()
 		log.Printf("builder: corruption suspect model=%s numChunks=%d streamedLen=%d chopped=%v", model, numberChunks, len(streamed), looksChopped(streamed))
