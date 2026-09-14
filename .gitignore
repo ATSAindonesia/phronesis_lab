@@ -21,3 +21,6 @@ backend/lab
 # logs / os
 *.log
 .DS_Store
+
+# builder sandbox runtime (per-session workspaces, image besar)
+workspaces/

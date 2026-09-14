@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"lab/internal/auth"
+	"lab/internal/builder"
 	"lab/internal/experiments"
 	"lab/internal/shared/config"
 	"lab/internal/shared/database"
@@ -34,6 +35,10 @@ func main() {
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
 	experimentsHandler.RegisterRoutes(mux)
+
+	// Self-hosted OpenComputer-compatible builder API (lab UI/UX experiment).
+	builderStore := builder.NewStore()
+	builderStore.RegisterRoutes(mux)
 
 	// Contoh endpoint terproteksi
 	mux.Handle("GET /api/me", authHandler.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
