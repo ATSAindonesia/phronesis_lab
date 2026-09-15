@@ -41,9 +41,10 @@ func main() {
 	builderStore := builder.NewStore()
 	builderStore.RegisterRoutes(mux)
 
-	// Chat completion (TokenPortal, streaming SSE).
-	chatHandler := chat.NewHandler()
+	// Chat completion (TokenPortal, streaming SSE) + riwayat chat (Postgres).
+	chatHandler := chat.NewHandler(db)
 	chatHandler.RegisterRoutes(mux)
+	chatHandler.RegisterHistoryRoutes(mux, authHandler.Middleware)
 
 	// Contoh endpoint terproteksi
 	mux.Handle("GET /api/me", authHandler.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

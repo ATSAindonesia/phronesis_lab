@@ -13,6 +13,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 )
 
 // ─── LLM config (TokenPortal, env chain sama kayak builder) ─────────────────
@@ -43,12 +45,14 @@ func getenvOr(k, def string) string {
 type Handler struct {
 	cfg    llmConfig
 	client *http.Client
+	store  *HistoryStore
 }
 
-func NewHandler() *Handler {
+func NewHandler(db *sqlx.DB) *Handler {
 	return &Handler{
 		cfg:    llmFromEnv(),
 		client: &http.Client{Timeout: 6 * time.Minute},
+		store:  NewHistoryStore(db),
 	}
 }
 

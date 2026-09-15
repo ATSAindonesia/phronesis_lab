@@ -15,6 +15,11 @@ import {
   CircleAlert,
   Brain,
   ChevronDown,
+  Plus,
+  Trash2,
+  X,
+  MessageSquare,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,45 +37,15 @@ interface ChatMeta {
   error?: string;
 }
 
-const STORAGE_KEY = "lab-chat-v1";
-const MAX_STORED = 100;
-const MAX_REASONING_STORED = 4000;
+interface Conversation {
+  uuid: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function loadHistory(): ChatMsg[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ChatMsg[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (m) =>
-          (m.role === "user" || m.role === "assistant") &&
-          typeof m.content === "string"
-      )
-      .slice(-MAX_STORED);
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(msgs: ChatMsg[]) {
-  try {
-    const trimmed = msgs.slice(-MAX_STORED).map((m) => ({
-      ...m,
-      reasoning:
-        m.reasoning && m.reasoning.length > MAX_REASONING_STORED
-          ? m.reasoning.slice(0, MAX_REASONING_STORED) + "…"
-          : m.reasoning,
-    }));
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-  } catch {
-    // storage penuh / disabled — abaikan.
-  }
-}
 
 // Parser SSE minimal: feed chunk teks, keluarin payload per event "data:".
 function createSSEParser(onPayload: (payload: string) => void) {
@@ -89,6 +64,23 @@ function createSSEParser(onPayload: (payload: string) => void) {
       }
     },
   };
+}
+
+function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 }
 
 // ─── Inline markdown mini (bold, italic, inline code) ───────────────────────
@@ -231,6 +223,114 @@ function ThinkingBlock({
   );
 }
 
+// ─── History sidebar ────────────────────────────────────────────────────────
+
+function HistorySidebar({
+  conversations,
+  activeConv,
+  loading,
+  onSelect,
+  onNew,
+  onDelete,
+  onClose,
+}: {
+  conversations: Conversation[];
+  activeConv: string | null;
+  loading: boolean;
+  onSelect: (uuid: string) => void;
+  onNew: () => void;
+  onDelete: (uuid: string) => void;
+  onClose?: () => void;
+}) {
+  return (
+    <div className="flex h-full w-full flex-col bg-white/90 backdrop-blur-xl dark:bg-zinc-900/90">
+      {/* Head: judul + tombol chat baru */}
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-200/80 px-4 py-3 dark:border-zinc-800/80">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+          Riwayat
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onNew}
+            title="Chat baru"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-600 transition hover:bg-amber-500/20 active:scale-95 dark:text-amber-400"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Baru
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Tutup"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 lg:hidden dark:text-zinc-400 dark:hover:bg-zinc-800"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Daftar percakapan */}
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        {loading ? (
+          <div className="space-y-1 px-2 py-1">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-10 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800/60"
+              />
+            ))}
+          </div>
+        ) : conversations.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs leading-relaxed text-zinc-400 dark:text-zinc-500">
+            Belum ada percakapan.
+            <br />
+            Mulai chat baru — riwayatnya
+            <br />
+            tersimpan di database lab.
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {conversations.map((c) => {
+              const isActive = c.uuid === activeConv;
+              return (
+                <li key={c.uuid} className="group relative">
+                  <button
+                    onClick={() => onSelect(c.uuid)}
+                    className={cn(
+                      "flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 pr-9 text-left transition-colors",
+                      isActive
+                        ? "bg-amber-500/10 text-zinc-900 dark:bg-amber-500/10 dark:text-zinc-100"
+                        : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800/60"
+                    )}
+                  >
+                    <span className="truncate text-[13px] font-medium leading-snug">
+                      {c.title}
+                    </span>
+                    <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                      {c.message_count} pesan · {formatWhen(c.updated_at)}
+                    </span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(c.uuid);
+                    }}
+                    title="Hapus percakapan"
+                    className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 opacity-0 transition hover:bg-red-50 hover:text-red-500 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
@@ -240,37 +340,150 @@ const SUGGESTIONS = [
   "Ide nama variabel buat fungsi retry + backoff",
 ];
 
+const LEGACY_STORAGE_KEY = "lab-chat-v1";
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ChatMeta | null>(null);
-  const [loaded, setLoaded] = useState(false);
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [convLoading, setConvLoading] = useState(true);
+  const [activeConv, setActiveConv] = useState<string | null>(null);
+  // Ref sinkron buat guard race: stream jalan terus walau user pindah conv.
+  const activeConvRef = useRef<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Restore history + fetch meta sekali di mount.
-  useEffect(() => {
-    setMessages(loadHistory());
-    setLoaded(true);
-    fetch("/api/chat/meta")
-      .then((r) => (r.ok ? r.json() : { error: `HTTP ${r.status}` }))
-      .then((d: ChatMeta) => setMeta(d))
-      .catch(() => setMeta({ error: "unreachable" }));
+  const refreshConversations = useCallback(async (): Promise<
+    Conversation[] | null
+  > => {
+    try {
+      const res = await fetch("/api/chat/conversations", { cache: "no-store" });
+      if (res.status === 401) {
+        setError("Sesi habis — refresh halaman buat login ulang.");
+        return null;
+      }
+      if (!res.ok) return null;
+      const data = (await res.json()) as { conversations?: Conversation[] };
+      const list = data.conversations ?? [];
+      setConversations(list);
+      return list;
+    } catch {
+      return null;
+    }
   }, []);
 
-  // Persist tiap perubahan (kecuali lagi streaming).
+  // ── Mount: muat daftar percakapan + migrasi localStorage lama → DB ──
   useEffect(() => {
-    if (loaded && !streaming) saveHistory(messages);
-  }, [messages, loaded, streaming]);
+    let cancelled = false;
+    (async () => {
+      const list = await refreshConversations();
+      if (cancelled) return;
+      setConvLoading(false);
+      if (list === null) return;
+
+      // Migrasi sekali: riwayat lama di localStorage dipindah ke database
+      // sebagai satu percakapan, lalu localStorage dibuang.
+      if (list.length === 0) {
+        let legacy: ChatMsg[] = [];
+        try {
+          const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as ChatMsg[];
+            if (Array.isArray(parsed)) {
+              legacy = parsed.filter(
+                (m) =>
+                  (m.role === "user" || m.role === "assistant") &&
+                  typeof m.content === "string" &&
+                  m.content.trim() !== ""
+              );
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        if (legacy.length > 0) {
+          try {
+            const createRes = await fetch("/api/chat/conversations", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: "Riwayat lama (browser)" }),
+            });
+            if (createRes.ok) {
+              const { conversation } = (await createRes.json()) as {
+                conversation: Conversation;
+              };
+              const saveRes = await fetch(
+                `/api/chat/conversations/${conversation.uuid}/messages`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    messages: legacy.map((m) => ({
+                      role: m.role,
+                      content: m.content,
+                      reasoning: m.reasoning || undefined,
+                    })),
+                  }),
+                }
+              );
+              if (saveRes.ok) {
+                try {
+                  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+                } catch {
+                  /* ignore */
+                }
+                if (!cancelled) {
+                  await refreshConversations();
+                  setActiveConv(conversation.uuid);
+                  setMessages(legacy);
+                }
+              }
+            }
+          } catch {
+            /* migrasi gagal — biarkan, jangan blok chat */
+          }
+        }
+      }
+
+      fetch("/api/chat/meta")
+        .then((r) => (r.ok ? r.json() : { error: `HTTP ${r.status}` }))
+        .then((d: ChatMeta) => {
+          if (!cancelled) setMeta(d);
+        })
+        .catch(() => {
+          if (!cancelled) setMeta({ error: "unreachable" });
+        });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshConversations]);
+
+  // Escape nutup drawer riwayat (mobile).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Auto-scroll ke bawah.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, error]);
+
+  // Sinkronkan ref activeConv (dipakai guard di dalam stream send()).
+  useEffect(() => {
+    activeConvRef.current = activeConv;
+  }, [activeConv]);
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -284,23 +497,159 @@ export default function ChatPage() {
     abortRef.current = null;
   }, []);
 
+  // ── Pilih percakapan: muat pesan dari database ──
+  const selectConversation = useCallback(
+    async (uuid: string) => {
+      if (uuid === activeConv) {
+        setSidebarOpen(false);
+        return;
+      }
+      stop();
+      setSidebarOpen(false);
+      setError(null);
+      try {
+        const res = await fetch(`/api/chat/conversations/${uuid}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          setError("Gagal memuat percakapan.");
+          return;
+        }
+        const data = (await res.json()) as {
+          messages?: {
+            uuid: string;
+            role: string;
+            content: string;
+            reasoning?: string | null;
+          }[];
+        };
+        const msgs: ChatMsg[] = (data.messages ?? [])
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            reasoning: m.reasoning ?? undefined,
+          }));
+        setActiveConv(uuid);
+        setMessages(msgs);
+      } catch {
+        setError("Gagal memuat percakapan.");
+      }
+    },
+    [activeConv, stop]
+  );
+
+  // ── Chat baru: kosongkan thread (percakapan dibuat saat kirim pesan pertama) ──
+  const newChat = useCallback(() => {
+    stop();
+    setSidebarOpen(false);
+    setActiveConv(null);
+    setMessages([]);
+    setError(null);
+    setInput("");
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [stop]);
+
+  // ── Hapus percakapan dari database ──
+  const deleteConversation = useCallback(
+    async (uuid: string) => {
+      if (!window.confirm("Hapus percakapan ini beserta semua pesannya?"))
+        return;
+      try {
+        const res = await fetch(`/api/chat/conversations/${uuid}`, {
+          method: "DELETE",
+        });
+        if (!res.ok && res.status !== 404) {
+          setError("Gagal menghapus percakapan.");
+          return;
+        }
+        setConversations((prev) => prev.filter((c) => c.uuid !== uuid));
+        if (uuid === activeConv) {
+          stop();
+          setActiveConv(null);
+          setMessages([]);
+        }
+      } catch {
+        setError("Gagal menghapus percakapan.");
+      }
+    },
+    [activeConv, stop]
+  );
+
   const send = useCallback(
     async (text: string) => {
       const content = text.trim();
       if (!content || streaming) return;
 
       setError(null);
+      setStreaming(true);
+      setInput("");
+      requestAnimationFrame(autoResize);
+
+      // Pastikan ada percakapan di DB — buat otomatis pakai judul dari
+      // pesan pertama.
+      let convId = activeConv;
+      if (!convId) {
+        try {
+          const res = await fetch("/api/chat/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: content.slice(0, 80) }),
+          });
+          if (res.status === 401) {
+            setError("Sesi habis — refresh halaman buat login ulang.");
+            setStreaming(false);
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as { conversation: Conversation };
+          convId = data.conversation.uuid;
+          // User pindah conv pas create in-flight? Batal + hapus conv kosong
+          // biar gak jadi sampah, jangan sentuh UI conv yang baru dipilih.
+          if (activeConvRef.current !== null && activeConvRef.current !== convId) {
+            fetch(`/api/chat/conversations/${convId}`, { method: "DELETE" }).catch(
+              () => undefined
+            );
+            setStreaming(false);
+            return;
+          }
+          setActiveConv(convId);
+        } catch {
+          setError("Gagal membuat percakapan baru.");
+          setStreaming(false);
+          return;
+        }
+      }
+      const currentConvId = convId;
+
       const history = [...messages, { role: "user" as const, content }];
       setMessages([
         ...history,
         { role: "assistant" as const, content: "", reasoning: "" },
       ]);
-      setInput("");
-      setStreaming(true);
-      requestAnimationFrame(autoResize);
+
+      // Simpan pesan user ke DB dulu (await — jaga urutan created_at),
+      // lalu mulai streaming. Gagal simpan gak blokir chat.
+      try {
+        const saveRes = await fetch(
+          `/api/chat/conversations/${currentConvId}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: [{ role: "user", content }] }),
+          }
+        );
+        if (!saveRes.ok) setError("Pesan user gagal tersimpan ke database.");
+      } catch {
+        setError("Pesan user gagal tersimpan ke database.");
+      }
 
       const controller = new AbortController();
       abortRef.current = controller;
+
+      // Akumulasi jawaban buat disimpan ke DB setelah stream selesai.
+      let accContent = "";
+      let accReasoning = "";
 
       try {
         const res = await fetch("/api/chat", {
@@ -339,7 +688,11 @@ export default function ChatPage() {
             const delta = chunk.choices?.[0]?.delta;
             if (!delta) return;
             if (delta.content || delta.reasoning) {
+              accContent += delta.content ?? "";
+              accReasoning += delta.reasoning ?? "";
               setMessages((prev) => {
+                // User pindah conv mid-stream? Jangan sentuh UI conv baru.
+                if (activeConvRef.current !== currentConvId) return prev;
                 if (prev.length === 0) return prev;
                 const next = [...prev];
                 const last = next[next.length - 1];
@@ -373,30 +726,51 @@ export default function ChatPage() {
         abortRef.current = null;
         setStreaming(false);
         // Buang assistant bubble kosong kalau gak dapet apa-apa.
-        setMessages((prev) =>
-          prev.length > 0 &&
-          prev[prev.length - 1].content === "" &&
-          !prev[prev.length - 1].reasoning
+        // Guard: hanya kalau user masih di conv yang sama.
+        setMessages((prev) => {
+          if (activeConvRef.current !== currentConvId) return prev;
+          return prev.length > 0 &&
+            prev[prev.length - 1].content === "" &&
+            !prev[prev.length - 1].reasoning
             ? prev.slice(0, -1)
-            : prev
-        );
+            : prev;
+        });
+        // Simpan jawaban assistant ke DB (partial pun disimpan).
+        if (accContent.trim() !== "" || accReasoning.trim() !== "") {
+          fetch(`/api/chat/conversations/${currentConvId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                {
+                  role: "assistant",
+                  content: accContent,
+                  reasoning:
+                    accReasoning.trim() !== "" ? accReasoning : undefined,
+                },
+              ],
+            }),
+          })
+            .then((r) => {
+              if (!r.ok) throw new Error("save failed");
+            })
+            .catch(() => setError("Jawaban gagal tersimpan ke database."))
+            .finally(() => {
+              refreshConversations();
+            });
+        } else {
+          refreshConversations();
+        }
       }
     },
-    [messages, streaming, autoResize]
+    [messages, streaming, activeConv, autoResize, refreshConversations]
   );
 
-  const clearChat = useCallback(() => {
-    if (messages.length === 0) return;
-    if (!window.confirm("Hapus semua riwayat chat?")) return;
-    stop();
-    setMessages([]);
-    setError(null);
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, [messages.length, stop]);
+  // Eraser: hapus percakapan aktif dari database.
+  const deleteActive = useCallback(() => {
+    if (!activeConv || messages.length === 0) return;
+    deleteConversation(activeConv);
+  }, [activeConv, messages.length, deleteConversation]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -409,7 +783,7 @@ export default function ChatPage() {
   const providerLabel = meta?.provider ?? "tokenportal";
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+    <div className="relative flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950">
       {/* Dekor: dot grid halus + glow amber di pojok */}
       <div
         aria-hidden
@@ -425,170 +799,227 @@ export default function ChatPage() {
         className="pointer-events-none absolute -top-24 right-0 h-64 w-64 rounded-full bg-amber-400/10 blur-3xl dark:bg-amber-500/10"
       />
 
-      {/* Header */}
-      <header className="relative z-10 flex items-center justify-between border-b border-zinc-200/80 bg-white/70 py-3 pl-16 pr-4 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <FlaskConical className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Chat
-            </h1>
-            <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-500">
-              completion playground
-            </p>
-          </div>
-        </div>
+      {/* ── Sidebar riwayat: desktop statis, mobile drawer ── */}
+      <aside className="relative z-10 hidden w-64 shrink-0 border-r border-zinc-200/80 lg:block dark:border-zinc-800/80">
+        <HistorySidebar
+          conversations={conversations}
+          activeConv={activeConv}
+          loading={convLoading}
+          onSelect={selectConversation}
+          onNew={newChat}
+          onDelete={deleteConversation}
+        />
+      </aside>
 
-        <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 font-mono text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:flex">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            <span className="text-zinc-900 dark:text-zinc-200">
-              {modelLabel}
-            </span>
-            <span className="text-zinc-400 dark:text-zinc-600">·</span>
-            <span>{providerLabel}</span>
-          </div>
-          <button
-            onClick={clearChat}
-            disabled={messages.length === 0}
-            title="Hapus riwayat"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-red-300 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-red-900 dark:hover:text-red-400"
-          >
-            <Eraser className="h-4 w-4" />
-          </button>
-        </div>
-      </header>
+      {/* Drawer riwayat (mobile/tablet) */}
+      <div
+        aria-hidden={!sidebarOpen}
+        onClick={() => setSidebarOpen(false)}
+        className={cn(
+          "fixed inset-0 z-[55] bg-zinc-950/50 backdrop-blur-sm transition-opacity duration-300 lg:hidden",
+          sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+      />
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-[60] flex w-72 max-w-[85vw] flex-col border-r border-zinc-200/80 bg-white shadow-2xl transition-transform duration-300 ease-out lg:hidden dark:border-zinc-800/80 dark:bg-zinc-950",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <HistorySidebar
+          conversations={conversations}
+          activeConv={activeConv}
+          loading={convLoading}
+          onSelect={selectConversation}
+          onNew={newChat}
+          onDelete={deleteConversation}
+          onClose={() => setSidebarOpen(false)}
+        />
+      </aside>
 
-      {/* Thread */}
-      <div className="relative z-10 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
-          {messages.length === 0 && (
-            <div className="lab-anim-in flex flex-1 flex-col items-center justify-center gap-6 py-16 text-center">
-              <div className="font-mono text-5xl text-amber-500/70 dark:text-amber-400/60">
-                {"{ }"}
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
-                  Lab Chat siap dicoba
-                </h2>
-                <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-                  Streaming langsung dari TokenPortal. Riwayat disimpan di
-                  browser kamu, gak dikirim ke mana-mana.
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => send(s)}
-                    className="rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs text-zinc-600 transition hover:border-amber-400/60 hover:text-amber-700 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {messages.map((m, i) =>
-            m.role === "user" ? (
-              <div key={i} className="lab-anim-up flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-zinc-900 px-4 py-2.5 text-sm leading-relaxed text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900">
-                  {m.content}
-                </div>
-              </div>
-            ) : (
-              <div key={i} className="lab-anim-up flex gap-3">
-                <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 font-mono text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                  AI
-                </div>
-                <div className="min-w-0 flex-1 border-l-2 border-amber-400/40 pl-3 text-sm text-zinc-800 dark:border-amber-500/30 dark:text-zinc-200">
-                  {m.reasoning ? (
-                    <ThinkingBlock
-                      reasoning={m.reasoning}
-                      active={
-                        streaming && i === messages.length - 1 && !m.content
-                      }
-                    />
-                  ) : null}
-                  {m.content ? (
-                    <AssistantContent content={m.content} />
-                  ) : null}
-                  {streaming &&
-                    i === messages.length - 1 &&
-                    m.content !== "" && (
-                      <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-amber-500 align-text-bottom" />
-                    )}
-                </div>
-              </div>
-            )
-          )}
-          <div ref={bottomRef} />
-        </div>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="relative z-10 mx-auto w-full max-w-3xl px-4 sm:px-6">
-          <div className="lab-anim-in mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
-            <CircleAlert className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 flex-1">{error}</span>
+      {/* ── Kolom utama: header + thread + input ── */}
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-zinc-200/80 bg-white/70 py-3 pl-16 pr-4 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60 sm:px-6">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setError(null)}
-              className="font-mono text-[11px] underline underline-offset-2"
+              onClick={() => setSidebarOpen(true)}
+              title="Riwayat chat"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition hover:text-zinc-800 lg:hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
-              tutup
+              <PanelLeft className="h-4 w-4" />
+            </button>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <FlaskConical className="h-4 w-4" />
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Chat
+              </h1>
+              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-500">
+                completion playground
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 font-mono text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:flex">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-zinc-900 dark:text-zinc-200">
+                {modelLabel}
+              </span>
+              <span className="text-zinc-400 dark:text-zinc-600">·</span>
+              <span>{providerLabel}</span>
+            </div>
+            <button
+              onClick={newChat}
+              title="Chat baru"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-amber-400/60 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <button
+              onClick={deleteActive}
+              disabled={!activeConv || messages.length === 0}
+              title="Hapus percakapan ini"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-red-300 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-red-900 dark:hover:text-red-400"
+            >
+              <Eraser className="h-4 w-4" />
             </button>
           </div>
-        </div>
-      )}
+        </header>
 
-      {/* Input dock */}
-      <div
-        className="relative z-10 border-t border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
-          <div className="flex items-end gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-sm transition focus-within:border-amber-400/70 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-amber-500/50">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                autoResize();
-              }}
-              onKeyDown={onKeyDown}
-              rows={1}
-              placeholder="Tanya apa aja ke lab…"
-              className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:text-sm"
-            />
-            {streaming ? (
-              <button
-                onClick={stop}
-                title="Stop"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 transition hover:bg-zinc-700 active:scale-90 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </button>
-            ) : (
-              <button
-                onClick={() => send(input)}
-                disabled={!input.trim()}
-                title="Kirim (Enter)"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-600 active:scale-90 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
-              >
-                <ArrowUp className="h-4 w-4" />
-              </button>
+        {/* Thread */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
+            {messages.length === 0 && (
+              <div className="lab-anim-in flex flex-1 flex-col items-center justify-center gap-6 py-16 text-center">
+                <div className="font-mono text-5xl text-amber-500/70 dark:text-amber-400/60">
+                  {"{ }"}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+                    Lab Chat siap dicoba
+                  </h2>
+                  <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+                    Streaming langsung dari TokenPortal. Riwayat percakapan
+                    tersimpan di database lab — lanjut kapan aja.
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => send(s)}
+                      className="rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs text-zinc-600 transition hover:border-amber-400/60 hover:text-amber-700 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
+
+            {messages.map((m, i) =>
+              m.role === "user" ? (
+                <div key={i} className="lab-anim-up flex justify-end">
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-zinc-900 px-4 py-2.5 text-sm leading-relaxed text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900">
+                    {m.content}
+                  </div>
+                </div>
+              ) : (
+                <div key={i} className="lab-anim-up flex gap-3">
+                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 font-mono text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    AI
+                  </div>
+                  <div className="min-w-0 flex-1 border-l-2 border-amber-400/40 pl-3 text-sm text-zinc-800 dark:border-amber-500/30 dark:text-zinc-200">
+                    {m.reasoning ? (
+                      <ThinkingBlock
+                        reasoning={m.reasoning}
+                        active={
+                          streaming && i === messages.length - 1 && !m.content
+                        }
+                      />
+                    ) : null}
+                    {m.content ? (
+                      <AssistantContent content={m.content} />
+                    ) : null}
+                    {streaming &&
+                      i === messages.length - 1 &&
+                      m.content !== "" && (
+                        <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-amber-500 align-text-bottom" />
+                      )}
+                  </div>
+                </div>
+              )
+            )}
+            <div ref={bottomRef} />
           </div>
-          <p className="mt-1.5 hidden px-1 text-center font-mono text-[10px] text-zinc-400 dark:text-zinc-600 sm:block">
-            enter kirim · shift+enter baris baru · riwayat: localStorage
-          </p>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
+            <div className="lab-anim-in mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              <CircleAlert className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="font-mono text-[11px] underline underline-offset-2"
+              >
+                tutup
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Input dock */}
+        <div
+          className="border-t border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
+            <div className="flex items-end gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-sm transition focus-within:border-amber-400/70 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-amber-500/50">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  autoResize();
+                }}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder="Tanya apa aja ke lab…"
+                className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:text-sm"
+              />
+              {streaming ? (
+                <button
+                  onClick={stop}
+                  title="Stop"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 transition hover:bg-zinc-700 active:scale-90 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => send(input)}
+                  disabled={!input.trim()}
+                  title="Kirim (Enter)"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-600 active:scale-90 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <p className="mt-1.5 hidden items-center justify-center gap-1.5 px-1 text-center font-mono text-[10px] text-zinc-400 dark:text-zinc-600 sm:flex">
+              enter kirim · shift+enter baris baru ·
+              <MessageSquare className="h-3 w-3" />
+              riwayat: database lab
+            </p>
+          </div>
         </div>
       </div>
     </div>
