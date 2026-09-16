@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -46,6 +47,12 @@ type Handler struct {
 	cfg    llmConfig
 	client *http.Client
 	store  *HistoryStore
+
+	// Cache daftar model upstream (TTL pendek) biar dropdown UI gak
+	// nembak TokenPortal tiap buka halaman.
+	modelsMu   sync.Mutex
+	modelsData []byte
+	modelsExp  time.Time
 }
 
 func NewHandler(db *sqlx.DB) *Handler {
@@ -71,6 +78,7 @@ type chatRequest struct {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /v1/chat", h.requireKey(http.HandlerFunc(h.handleChat)))
 	mux.Handle("GET /v1/chat/meta", h.requireKey(http.HandlerFunc(h.handleMeta)))
+	mux.Handle("GET /v1/chat/models", h.requireKey(http.HandlerFunc(h.handleModels)))
 }
 
 // requireKey: X-API-Key non-empty (header) atau api_key (query) — pola sama
@@ -95,6 +103,73 @@ func (h *Handler) handleMeta(w http.ResponseWriter, r *http.Request) {
 		host = u.Host
 	}
 	writeJSON(w, map[string]string{"model": h.cfg.Model, "provider": host})
+}
+
+// handleModels: proxy daftar model TokenPortal (OpenAI-compatible /models)
+// buat dropdown pilihan model di UI. Hasil di-cache in-memory 5 menit.
+func (h *Handler) handleModels(w http.ResponseWriter, r *http.Request) {
+	h.modelsMu.Lock()
+	defer h.modelsMu.Unlock()
+
+	if h.modelsData != nil && time.Now().Before(h.modelsExp) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(h.modelsData)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		strings.TrimRight(h.cfg.BaseURL, "/")+"/models", nil)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "Failed to build upstream request")
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+h.cfg.APIKey)
+
+	res, err := h.client.Do(req)
+	if err != nil {
+		jsonErr(w, http.StatusBadGateway, "LLM upstream unreachable: "+err.Error())
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<10))
+		log.Printf("chat: models upstream -> %d: %s", res.StatusCode, string(b))
+		jsonErr(w, http.StatusBadGateway, fmt.Sprintf("LLM upstream error (HTTP %d)", res.StatusCode))
+		return
+	}
+
+	var parsed struct {
+		Data []struct {
+			ID            string `json:"id"`
+			OwnedBy       string `json:"owned_by"`
+			ContextWindow int    `json:"context_window"`
+			Gangguan      bool   `json:"gangguan"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&parsed); err != nil {
+		jsonErr(w, http.StatusBadGateway, "Invalid upstream models response")
+		return
+	}
+
+	models := make([]map[string]interface{}, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		models = append(models, map[string]interface{}{
+			"id":             m.ID,
+			"owned_by":       m.OwnedBy,
+			"context_window": m.ContextWindow,
+			"gangguan":       m.Gangguan,
+		})
+	}
+	out, _ := json.Marshal(map[string]interface{}{"models": models})
+
+	h.modelsData = out
+	h.modelsExp = time.Now().Add(5 * time.Minute)
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(out)
 }
 
 func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +283,19 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, isErr := chunk["error"]; isErr {
 			log.Printf("chat: upstream stream error: %s", payload)
-			sendEvent(payload) // teruskan apa adanya, frontend yang tangani
+			// Normalisasi: error upstream bisa berupa objek
+			// {"error":{"type":...,"message":...}} — frontend mengharapkan
+			// string. Ekstrak message-nya di sini.
+			errMsg := "LLM upstream error"
+			if errObj, ok := chunk["error"].(map[string]interface{}); ok {
+				if m, ok := errObj["message"].(string); ok && m != "" {
+					errMsg = m
+				}
+			} else if s, ok := chunk["error"].(string); ok && s != "" {
+				errMsg = s
+			}
+			normPayload, _ := json.Marshal(map[string]string{"error": errMsg})
+			sendEvent(string(normPayload))
 			sendEvent("[DONE]")
 			return
 		}

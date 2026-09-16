@@ -22,6 +22,7 @@ import {
   PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AnimatedDropdown from "@/components/ui/animated-dropdown";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,13 @@ interface ChatMeta {
   model?: string;
   provider?: string;
   error?: string;
+}
+
+interface ChatModel {
+  id: string;
+  owned_by?: string;
+  context_window?: number;
+  gangguan?: boolean;
 }
 
 interface Conversation {
@@ -64,6 +72,16 @@ function createSSEParser(onPayload: (payload: string) => void) {
       }
     },
   };
+}
+
+// Format context window: 131056 -> "131k", 1048560 -> "1M".
+function fmtCtx(n?: number): string {
+  if (!n || n <= 0) return "";
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
+  }
+  return `${Math.round(n / 1000)}k`;
 }
 
 function formatWhen(iso: string): string {
@@ -98,7 +116,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
       nodes.push(
         <code
           key={`${keyPrefix}-c${i++}`}
-          className="rounded bg-zinc-200/70 px-1.5 py-0.5 font-mono text-[0.85em] text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
+          className="rounded bg-line px-1.5 py-0.5 font-mono text-[0.85em] text-ink"
         >
           {tok.slice(1, -1)}
         </code>
@@ -131,13 +149,13 @@ function AssistantContent({ content }: { content: string }) {
           return (
             <div
               key={pi}
-              className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
+              className="overflow-hidden rounded-xl border border-line"
             >
-              <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-100 px-3 py-1.5 font-mono text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
+              <div className="flex items-center justify-between border-b border-line bg-accent px-3 py-1.5 font-mono text-[11px] text-muted">
                 <span>{lang || "code"}</span>
-                <span className="text-amber-600 dark:text-amber-400">lab</span>
+                <span className="text-gold-ink">lab</span>
               </div>
-              <pre className="overflow-x-auto bg-zinc-50 p-3 font-mono text-[13px] leading-relaxed text-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
+              <pre className="overflow-x-auto bg-paper p-3 font-mono text-[13px] leading-relaxed text-ink">
                 <code>{code.replace(/\n$/, "")}</code>
               </pre>
             </div>
@@ -180,16 +198,16 @@ function ThinkingBlock({
     : `berpikir selesai · ${reasoning.length} char`;
 
   return (
-    <div className="lab-anim-in mb-3 overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-100/60 dark:border-zinc-800/80 dark:bg-zinc-900/50">
+    <div className="lab-anim-in mb-3 overflow-hidden rounded-xl border border-line bg-accent/60">
       <button
         type="button"
         onClick={() => setUserToggle(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-muted transition-colors hover:text-ink"
       >
         <Brain
           className={cn(
             "h-3.5 w-3.5 shrink-0",
-            active ? "text-amber-500" : "text-zinc-400 dark:text-zinc-500"
+            active ? "text-gold-ink" : "text-faint"
           )}
         />
         <span className={cn("min-w-0 flex-1 truncate", active && "lab-shimmer-text")}>
@@ -211,11 +229,11 @@ function ThinkingBlock({
       >
         <div
           ref={bodyRef}
-          className="max-h-64 overflow-y-auto border-t border-zinc-200/70 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-zinc-500 dark:border-zinc-800/70 dark:text-zinc-400"
+          className="max-h-64 overflow-y-auto border-t border-line px-3 py-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted"
         >
           {reasoning}
           {active && (
-            <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-amber-500 align-text-bottom" />
+            <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-gold align-text-bottom" />
           )}
         </div>
       </div>
@@ -243,17 +261,17 @@ function HistorySidebar({
   onClose?: () => void;
 }) {
   return (
-    <div className="flex h-full w-full flex-col bg-white/90 backdrop-blur-xl dark:bg-zinc-900/90">
+    <div className="flex h-full w-full flex-col bg-card backdrop-blur-xl">
       {/* Head: judul + tombol chat baru */}
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-200/80 px-4 py-3 dark:border-zinc-800/80">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-faint">
           Riwayat
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={onNew}
             title="Chat baru"
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-600 transition hover:bg-amber-500/20 active:scale-95 dark:text-amber-400"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-2.5 text-xs font-medium text-gold-ink transition hover:bg-gold/20 active:scale-95"
           >
             <Plus className="h-3.5 w-3.5" />
             Baru
@@ -262,7 +280,7 @@ function HistorySidebar({
             <button
               onClick={onClose}
               title="Tutup"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 lg:hidden dark:text-zinc-400 dark:hover:bg-zinc-800"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-accent lg:hidden"
             >
               <X className="h-4 w-4" />
             </button>
@@ -277,12 +295,12 @@ function HistorySidebar({
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="h-10 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800/60"
+                className="h-10 animate-pulse rounded-lg bg-accent"
               />
             ))}
           </div>
         ) : conversations.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs leading-relaxed text-zinc-400 dark:text-zinc-500">
+          <p className="px-3 py-6 text-center text-xs leading-relaxed text-faint">
             Belum ada percakapan.
             <br />
             Mulai chat baru — riwayatnya
@@ -300,14 +318,14 @@ function HistorySidebar({
                     className={cn(
                       "flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 pr-9 text-left transition-colors",
                       isActive
-                        ? "bg-amber-500/10 text-zinc-900 dark:bg-amber-500/10 dark:text-zinc-100"
-                        : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800/60"
+                        ? "bg-gold/10 text-ink"
+                        : "text-muted hover:bg-accent"
                     )}
                   >
                     <span className="truncate text-[13px] font-medium leading-snug">
                       {c.title}
                     </span>
-                    <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <span className="font-mono text-[10px] text-faint">
                       {c.message_count} pesan · {formatWhen(c.updated_at)}
                     </span>
                   </button>
@@ -317,7 +335,7 @@ function HistorySidebar({
                       onDelete(c.uuid);
                     }}
                     title="Hapus percakapan"
-                    className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-zinc-400 opacity-0 transition hover:bg-red-50 hover:text-red-500 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                    className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-faint opacity-0 transition hover:bg-red-50 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -341,6 +359,7 @@ const SUGGESTIONS = [
 ];
 
 const LEGACY_STORAGE_KEY = "lab-chat-v1";
+const MODEL_STORAGE_KEY = "lab-chat-model";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -348,6 +367,8 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ChatMeta | null>(null);
+  const [models, setModels] = useState<ChatModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [convLoading, setConvLoading] = useState(true);
@@ -459,6 +480,26 @@ export default function ChatPage() {
         })
         .catch(() => {
           if (!cancelled) setMeta({ error: "unreachable" });
+        });
+
+      fetch("/api/chat/models")
+        .then((r) => (r.ok ? r.json() : { models: [] }))
+        .then((d: { models?: ChatModel[] }) => {
+          if (cancelled) return;
+          const list = d.models ?? [];
+          setModels(list);
+          // Restore pilihan model terakhir — valid dulu ada di daftar.
+          try {
+            const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
+            if (saved && list.some((m) => m.id === saved)) {
+              setSelectedModel(saved);
+            }
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {
+          /* daftar model gagal — badge tetap tampil tanpa dropdown */
         });
     })();
     return () => {
@@ -655,7 +696,10 @@ export default function ChatPage() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history }),
+          body: JSON.stringify({
+            messages: history,
+            model: selectedModel ?? undefined,
+          }),
           signal: controller.signal,
         });
 
@@ -677,19 +721,33 @@ export default function ChatPage() {
           try {
             const chunk = JSON.parse(payload) as {
               choices?: {
-                delta?: { content?: string; reasoning?: string };
+                delta?: {
+                  content?: string;
+                  reasoning?: string;
+                  reasoning_content?: string;
+                };
               }[];
-              error?: string;
+              error?: string | { message?: string };
             };
             if (chunk.error) {
-              setError(chunk.error);
+              // Error upstream bisa string ATAU objek {type, message} —
+              // jangan pernah setLangsung nilai objek ke state string,
+              // bikin crash render ("Objects are not valid as a React child").
+              const errMsg =
+                typeof chunk.error === "string"
+                  ? chunk.error
+                  : ((chunk.error as { message?: string })?.message ??
+                    "Chat gagal");
+              setError(errMsg);
               return;
             }
             const delta = chunk.choices?.[0]?.delta;
             if (!delta) return;
-            if (delta.content || delta.reasoning) {
+            // Beda provider beda nama field reasoning — terima dua-duanya.
+            const rDelta = delta.reasoning ?? delta.reasoning_content ?? "";
+            if (delta.content || rDelta) {
               accContent += delta.content ?? "";
-              accReasoning += delta.reasoning ?? "";
+              accReasoning += rDelta;
               setMessages((prev) => {
                 // User pindah conv mid-stream? Jangan sentuh UI conv baru.
                 if (activeConvRef.current !== currentConvId) return prev;
@@ -700,7 +758,7 @@ export default function ChatPage() {
                   ...last,
                   role: "assistant",
                   content: last.content + (delta.content ?? ""),
-                  reasoning: (last.reasoning ?? "") + (delta.reasoning ?? ""),
+                  reasoning: (last.reasoning ?? "") + rDelta,
                 };
                 return next;
               });
@@ -763,7 +821,7 @@ export default function ChatPage() {
         }
       }
     },
-    [messages, streaming, activeConv, autoResize, refreshConversations]
+    [messages, streaming, activeConv, selectedModel, autoResize, refreshConversations]
   );
 
   // Eraser: hapus percakapan aktif dari database.
@@ -779,15 +837,25 @@ export default function ChatPage() {
     }
   };
 
-  const modelLabel = meta?.model ?? "…";
+  const modelLabel = selectedModel ?? meta?.model ?? "…";
   const providerLabel = meta?.provider ?? "tokenportal";
+  const activeModelId = selectedModel ?? meta?.model;
+
+  const pickModel = (id: string) => {
+    setSelectedModel(id);
+    try {
+      window.localStorage.setItem(MODEL_STORAGE_KEY, id);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
-    <div className="relative flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+    <div className="relative flex h-full w-full overflow-hidden bg-paper">
       {/* Dekor: dot grid halus + glow amber di pojok */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
         style={{
           backgroundImage:
             "radial-gradient(circle, rgba(120,113,108,0.35) 1px, transparent 1px)",
@@ -796,11 +864,11 @@ export default function ChatPage() {
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-24 right-0 h-64 w-64 rounded-full bg-amber-400/10 blur-3xl dark:bg-amber-500/10"
+        className="pointer-events-none absolute -top-24 right-0 h-64 w-64 rounded-full bg-gold/10 blur-3xl"
       />
 
       {/* ── Sidebar riwayat: desktop statis, mobile drawer ── */}
-      <aside className="relative z-10 hidden w-64 shrink-0 border-r border-zinc-200/80 lg:block dark:border-zinc-800/80">
+      <aside className="relative z-10 hidden w-64 shrink-0 border-r border-line lg:block">
         <HistorySidebar
           conversations={conversations}
           activeConv={activeConv}
@@ -816,13 +884,13 @@ export default function ChatPage() {
         aria-hidden={!sidebarOpen}
         onClick={() => setSidebarOpen(false)}
         className={cn(
-          "fixed inset-0 z-[55] bg-zinc-950/50 backdrop-blur-sm transition-opacity duration-300 lg:hidden",
+          "fixed inset-0 z-[55] bg-ink/40 backdrop-blur-sm transition-opacity duration-300 lg:hidden",
           sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[60] flex w-72 max-w-[85vw] flex-col border-r border-zinc-200/80 bg-white shadow-2xl transition-transform duration-300 ease-out lg:hidden dark:border-zinc-800/80 dark:bg-zinc-950",
+          "fixed inset-y-0 left-0 z-[60] flex w-72 max-w-[85vw] flex-col border-r border-line bg-card shadow-2xl transition-transform duration-300 ease-out lg:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -840,44 +908,79 @@ export default function ChatPage() {
       {/* ── Kolom utama: header + thread + input ── */}
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-zinc-200/80 bg-white/70 py-3 pl-16 pr-4 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60 sm:px-6">
+        {/* Header — z-20 biar dropdown panel gak ketutup thread */}
+        <header className="relative z-20 flex items-center justify-between border-b border-line bg-card/85 py-3 pl-16 pr-4 backdrop-blur sm:px-6">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
               title="Riwayat chat"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition hover:text-zinc-800 lg:hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-card text-muted transition hover:text-ink lg:hidden"
             >
               <PanelLeft className="h-4 w-4" />
             </button>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 text-gold-ink">
               <FlaskConical className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              <h1 className="text-sm font-semibold text-ink">
                 Chat
               </h1>
-              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-500">
+              <p className="font-mono text-[11px] text-muted">
                 completion playground
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 font-mono text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:flex">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-              <span className="text-zinc-900 dark:text-zinc-200">
-                {modelLabel}
-              </span>
-              <span className="text-zinc-400 dark:text-zinc-600">·</span>
-              <span>{providerLabel}</span>
-            </div>
+            {models.length > 0 ? (
+              <AnimatedDropdown
+                className="hidden sm:block"
+                triggerClassName="h-8 gap-2 rounded-full border-line bg-card px-3 py-1.5 font-mono text-[11px] text-muted hover:bg-card hover:text-ink [&_svg]:h-3.5 [&_svg]:w-3.5"
+                text={
+                  <span className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    <span className="text-ink">
+                      {modelLabel}
+                    </span>
+                    <span className="text-faint">·</span>
+                    <span>{providerLabel}</span>
+                  </span>
+                }
+                items={models.map((m) => ({
+                  name: m.id,
+                  description: [
+                    m.owned_by,
+                    fmtCtx(m.context_window)
+                      ? `${fmtCtx(m.context_window)} ctx`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                  danger: m.gangguan,
+                  active: activeModelId === m.id,
+                }))}
+                onSelect={(item) => pickModel(item.name)}
+              />
+            ) : (
+              <div className="hidden items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 font-mono text-[11px] text-muted sm:flex">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="text-ink">
+                  {modelLabel}
+                </span>
+                <span className="text-faint">·</span>
+                <span>{providerLabel}</span>
+              </div>
+            )}
             <button
               onClick={newChat}
               title="Chat baru"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-amber-400/60 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-muted transition hover:border-gold/60 hover:text-gold-ink"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -885,7 +988,7 @@ export default function ChatPage() {
               onClick={deleteActive}
               disabled={!activeConv || messages.length === 0}
               title="Hapus percakapan ini"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-red-300 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-red-900 dark:hover:text-red-400"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-muted transition hover:border-red-300 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Eraser className="h-4 w-4" />
             </button>
@@ -897,14 +1000,14 @@ export default function ChatPage() {
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
             {messages.length === 0 && (
               <div className="lab-anim-in flex flex-1 flex-col items-center justify-center gap-6 py-16 text-center">
-                <div className="font-mono text-5xl text-amber-500/70 dark:text-amber-400/60">
+                <div className="font-mono text-5xl text-gold-ink/70">
                   {"{ }"}
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+                  <h2 className="text-lg font-semibold text-ink">
                     Lab Chat siap dicoba
                   </h2>
-                  <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-1 max-w-sm text-sm text-muted">
                     Streaming langsung dari TokenPortal. Riwayat percakapan
                     tersimpan di database lab — lanjut kapan aja.
                   </p>
@@ -914,7 +1017,7 @@ export default function ChatPage() {
                     <button
                       key={s}
                       onClick={() => send(s)}
-                      className="rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs text-zinc-600 transition hover:border-amber-400/60 hover:text-amber-700 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/50 dark:hover:text-amber-400"
+                      className="rounded-full border border-line bg-card px-3.5 py-1.5 text-xs text-muted transition hover:border-gold/60 hover:text-gold-ink active:scale-95"
                     >
                       {s}
                     </button>
@@ -926,16 +1029,16 @@ export default function ChatPage() {
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <div key={i} className="lab-anim-up flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-zinc-900 px-4 py-2.5 text-sm leading-relaxed text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900">
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-sm leading-relaxed text-paper">
                     {m.content}
                   </div>
                 </div>
               ) : (
                 <div key={i} className="lab-anim-up flex gap-3">
-                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 font-mono text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-mono text-[10px] font-bold text-gold-ink">
                     AI
                   </div>
-                  <div className="min-w-0 flex-1 border-l-2 border-amber-400/40 pl-3 text-sm text-zinc-800 dark:border-amber-500/30 dark:text-zinc-200">
+                  <div className="min-w-0 flex-1 border-l-2 border-gold/40 pl-3 text-sm text-ink">
                     {m.reasoning ? (
                       <ThinkingBlock
                         reasoning={m.reasoning}
@@ -950,7 +1053,7 @@ export default function ChatPage() {
                     {streaming &&
                       i === messages.length - 1 &&
                       m.content !== "" && (
-                        <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-amber-500 align-text-bottom" />
+                        <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gold align-text-bottom" />
                       )}
                   </div>
                 </div>
@@ -963,7 +1066,7 @@ export default function ChatPage() {
         {/* Error */}
         {error && (
           <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-            <div className="lab-anim-in mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            <div className="lab-anim-in mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               <CircleAlert className="h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1">{error}</span>
               <button
@@ -978,11 +1081,11 @@ export default function ChatPage() {
 
         {/* Input dock */}
         <div
-          className="border-t border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/60"
+          className="border-t border-line bg-card/85 backdrop-blur"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
-            <div className="flex items-end gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-sm transition focus-within:border-amber-400/70 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-amber-500/50">
+            <div className="flex items-end gap-2 rounded-2xl border border-line-strong bg-card p-2 shadow-sm transition focus-within:border-gold">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -993,13 +1096,13 @@ export default function ChatPage() {
                 onKeyDown={onKeyDown}
                 rows={1}
                 placeholder="Tanya apa aja ke lab…"
-                className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:text-sm"
+                className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-base text-ink placeholder:text-faint focus:outline-none sm:text-sm"
               />
               {streaming ? (
                 <button
                   onClick={stop}
                   title="Stop"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-zinc-50 transition hover:bg-zinc-700 active:scale-90 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ink text-paper transition hover:bg-black active:scale-90"
                 >
                   <Square className="h-3.5 w-3.5 fill-current" />
                 </button>
@@ -1008,13 +1111,13 @@ export default function ChatPage() {
                   onClick={() => send(input)}
                   disabled={!input.trim()}
                   title="Kirim (Enter)"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-600 active:scale-90 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold text-ink transition hover:bg-gold active:scale-90 disabled:cursor-not-allowed disabled:bg-line-strong"
                 >
                   <ArrowUp className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <p className="mt-1.5 hidden items-center justify-center gap-1.5 px-1 text-center font-mono text-[10px] text-zinc-400 dark:text-zinc-600 sm:flex">
+            <p className="mt-1.5 hidden items-center justify-center gap-1.5 px-1 text-center font-mono text-[10px] text-faint sm:flex">
               enter kirim · shift+enter baris baru ·
               <MessageSquare className="h-3 w-3" />
               riwayat: database lab
