@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   FlaskConical,
-  Cpu,
+  FolderTree,
   Database,
   LineChart,
   Terminal,
@@ -31,7 +31,7 @@ const navItems: NavItem[] = [
   { name: "Overview", href: "/lab", icon: FlaskConical },
   { name: "Experiments", href: "/lab/experiments", icon: FolderGit2, badge: "3 Running" },
   { name: "Chat", href: "/lab/chat", icon: MessageSquare },
-  { name: "Models", href: "/lab/models", icon: Cpu },
+  { name: "file-system scanner", href: "/lab/files", icon: FolderTree },
   { name: "Datasets", href: "/lab/datasets", icon: Database },
   { name: "Analytics", href: "/lab/analytics", icon: LineChart },
   { name: "Console", href: "/lab/console", icon: Terminal },
