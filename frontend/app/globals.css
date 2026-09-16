@@ -1,31 +1,143 @@
 @import "tailwindcss";
 
+/* ─── PHRONESIS — b.ai-inspired design system ─────────────────────────────
+ Palette from b.ai public CSS: warm cream paper (#FFFDF7/#FEFBF3),
+ near-black ink (#141413), warm hairlines (#dcd3c7), brand gold (#CDBD09),
+ grey ladder (#636363/#979797). Single theme — no auto dark. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fdfcf7;
+  --foreground: #141413;
+  --paper: #fdfcf7;
+  --card: #ffffff;
+  --panel: #fbf8f0;
+  --ink: #141413;
+  --ink-soft: #252525;
+  --muted: #636363;
+  --faint: #979797;
+  --line: #e7e1d4;
+  --line-strong: #d9d4ca;
+  --gold: #cdbd09;
+  --gold-ink: #8f8406;
+  --night: #0a0a09;
+
+  /* shadcn-style tokens (used by components/ui) */
+  --primary: #141413;
+  --primary-foreground: #fdfcf7;
+  --accent: #f4f0e6;
+  --accent-foreground: #141413;
+  --border: #e7e1d4;
+  --input: #e7e1d4;
+  --ring: rgba(205, 189, 9, 0.55);
+  --radius: 0.625rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-night: var(--night);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-dm-sans), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* ─── Lab chat animations ─────────────────────────────────────────────── */
+::selection {
+  background: var(--gold);
+  color: var(--ink);
+}
+
+/* ─── Typography helpers ─────────────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+/* b.ai micro-label: small caps, wide tracking, grey */
+.label-caps {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Giant editorial hero type */
+.hero-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+
+/* ─── Surfaces ───────────────────────────────────────────────────────────── */
+.hairline-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
+/* ─── Marquee ticker (b.ai model carousel) ───────────────────────────────── */
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee {
+  overflow: hidden;
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-x 28s linear infinite;
+}
+.marquee-track.slow {
+  animation-duration: 44s;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+/* Faint warm dot grid for page decoration */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(20, 20, 19, 0.14) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ─── Lab animations (used by chat + auth) ───────────────────────────────── */
 @keyframes lab-fade-up {
   from {
     opacity: 0;
@@ -63,7 +175,7 @@ body {
     90deg,
     currentColor 0%,
     currentColor 40%,
-    rgba(245, 158, 11, 1) 50%,
+    var(--gold-ink) 50%,
     currentColor 60%,
     currentColor 100%
   );
@@ -72,4 +184,28 @@ body {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: lab-shimmer 1.8s linear infinite;
+}
+
+/* Scrollbars — warm grey, thin */
+.lab-dropdown-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(151, 151, 151, 0.55) transparent;
+}
+.lab-dropdown-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.lab-dropdown-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lab-dropdown-scroll::-webkit-scrollbar-thumb {
+  background: rgba(151, 151, 151, 0.55);
+  border-radius: 8px;
+}
+.lab-dropdown-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 99, 99, 0.8);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(151, 151, 151, 0.45) transparent;
 }
