@@ -11,6 +11,7 @@ import (
 	"lab/internal/builder"
 	"lab/internal/chat"
 	"lab/internal/experiments"
+	"lab/internal/files"
 	"lab/internal/shared/config"
 	"lab/internal/shared/database"
 	httpx "lab/internal/shared/http"
@@ -45,6 +46,11 @@ func main() {
 	chatHandler := chat.NewHandler(db)
 	chatHandler.RegisterRoutes(mux)
 	chatHandler.RegisterHistoryRoutes(mux, authHandler.Middleware)
+
+	// Code Explorer (/lab/files): file tree + pembaca konten read-only
+	// di dalam PROJECT_ROOT.
+	filesHandler := files.NewHandler()
+	filesHandler.RegisterRoutes(mux)
 
 	// Contoh endpoint terproteksi
 	mux.Handle("GET /api/me", authHandler.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
