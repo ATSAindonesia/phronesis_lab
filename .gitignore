@@ -24,3 +24,4 @@ backend/lab
 
 # builder sandbox runtime (per-session workspaces, image besar)
 workspaces/
+*.pid
