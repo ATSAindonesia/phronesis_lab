@@ -144,6 +144,13 @@ export default function FilesPage() {
   const openDirsRef = useRef<Set<string>>(new Set());
   const selectedPathRef = useRef<string>("");
   const viewerContainerRef = useRef<HTMLDivElement>(null);
+  // Mirror of treeData for synchronous reads inside toggleFolder.
+  // (Reading node state inside a setTreeData updater is a side effect —
+  // StrictMode double-invokes updaters so the read can lie. Ref stays fresh.)
+  const treeDataRef = useRef<TreeNode[]>([]);
+  useEffect(() => {
+    treeDataRef.current = treeData;
+  }, [treeData]);
 
   // Load root tree
   const loadRootTree = useCallback(async (): Promise<void> => {
@@ -200,6 +207,9 @@ export default function FilesPage() {
         );
         if (!res.ok) continue;
         const json = await res.json();
+        // Stale-response guard: skip inject if the dir was closed
+        // while this fetch was in flight.
+        if (!openDirsRef.current.has(dirPath)) continue;
         const entries: FileEntry[] = json.entries || [];
         entries.sort((a, b) => {
           if (a.type === b.type) return a.name.localeCompare(b.name);
@@ -213,77 +223,75 @@ export default function FilesPage() {
   }, []);
 
   // Toggle single folder
-  const toggleFolder = useCallback(
-    async (folderPath: string) => {
-      let isCurrentlyOpen = false;
-      let isCurrentlyLoaded = false;
+  const toggleFolder = useCallback(async (folderPath: string) => {
+    const node = findNode(treeDataRef.current, folderPath);
+    const isCurrentlyOpen = node?.isOpen ?? false;
+    const isCurrentlyLoaded =
+      node?.isLoaded ?? openDirsRef.current.has(folderPath);
 
-      setTreeData((prev) => {
-        const node = findNode(prev, folderPath);
-        if (node) {
-          isCurrentlyOpen = node.isOpen;
-          isCurrentlyLoaded = node.isLoaded;
-          if (node.isOpen) {
-            return setNodeOpen(prev, folderPath, false);
-          } else if (node.isLoaded) {
-            return setNodeOpen(prev, folderPath, true);
-          } else {
-            return setNodeLoading(prev, folderPath, true);
-          }
-        }
-        return prev;
-      });
-
+    if (isCurrentlyOpen) {
+      // Close path: update state + URL optimistically, then return.
+      setTreeData((prev) => setNodeOpen(prev, folderPath, false));
       const nextOpenDirs = new Set(openDirsRef.current);
-      if (isCurrentlyOpen) {
-        nextOpenDirs.delete(folderPath);
-        openDirsRef.current = nextOpenDirs;
-        updateUrlState(
-          selectedPathRef.current,
-          Array.from(nextOpenDirs),
-          "replace"
-        );
-        return;
-      }
-
-      nextOpenDirs.add(folderPath);
+      nextOpenDirs.delete(folderPath);
       openDirsRef.current = nextOpenDirs;
       updateUrlState(
         selectedPathRef.current,
         Array.from(nextOpenDirs),
         "replace"
       );
+      return;
+    }
 
-      if (isCurrentlyLoaded) return;
+    // Open path: update URL optimistically.
+    const nextOpenDirs = new Set(openDirsRef.current);
+    nextOpenDirs.add(folderPath);
+    openDirsRef.current = nextOpenDirs;
+    updateUrlState(
+      selectedPathRef.current,
+      Array.from(nextOpenDirs),
+      "replace"
+    );
 
-      try {
-        const res = await fetch(
-          `/api/files/tree?path=${encodeURIComponent(folderPath)}`
+    if (isCurrentlyLoaded) {
+      setTreeData((prev) => setNodeOpen(prev, folderPath, true));
+      return;
+    }
+
+    setTreeData((prev) => setNodeLoading(prev, folderPath, true));
+
+    try {
+      const res = await fetch(
+        `/api/files/tree?path=${encodeURIComponent(folderPath)}`
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        setTreeData((prev) =>
+          setNodeError(
+            prev,
+            folderPath,
+            json.error?.message || "Failed to load directory"
+          )
         );
-        const json = await res.json();
-        if (!res.ok) {
-          setTreeData((prev) =>
-            setNodeError(
-              prev,
-              folderPath,
-              json.error?.message || "Failed to load directory"
-            )
-          );
-          return;
-        }
-        const rawEntries: FileEntry[] = json.entries || [];
-        rawEntries.sort((a, b) => {
-          if (a.type === b.type) return a.name.localeCompare(b.name);
-          return a.type === "directory" ? -1 : 1;
-        });
-        setTreeData((prev) => injectChildren(prev, folderPath, rawEntries));
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Network error";
-        setTreeData((prev) => setNodeError(prev, folderPath, message));
+        return;
       }
-    },
-    []
-  );
+      // Stale-response guard: user may have closed the folder while
+      // the fetch was in flight — don't force it back open.
+      if (!openDirsRef.current.has(folderPath)) {
+        setTreeData((prev) => setNodeLoading(prev, folderPath, false));
+        return;
+      }
+      const rawEntries: FileEntry[] = json.entries || [];
+      rawEntries.sort((a, b) => {
+        if (a.type === b.type) return a.name.localeCompare(b.name);
+        return a.type === "directory" ? -1 : 1;
+      });
+      setTreeData((prev) => injectChildren(prev, folderPath, rawEntries));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Network error";
+      setTreeData((prev) => setNodeError(prev, folderPath, message));
+    }
+  }, []);
 
   // Load content of a specific file
   const selectFile = useCallback(
@@ -457,14 +465,14 @@ export default function FilesPage() {
   }, [activeFile]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row bg-background overflow-hidden">
+    <div className="flex h-full w-full min-h-0 flex-col md:flex-row bg-background overflow-hidden">
       {/* ─── Tree Sidebar ─────────────────────────────────────────────────── */}
       <div
         className={cn(
-          "border-r border-line bg-panel flex flex-col transition-all duration-200 shrink-0",
+          "border-line bg-panel flex flex-col transition-all duration-200 shrink-0 overflow-hidden",
           isSidebarOpen
-            ? "w-full md:w-80 h-80 md:h-full"
-            : "h-auto md:h-full md:w-0 overflow-hidden border-r-0"
+            ? "border-r w-full md:w-80 h-80 md:h-full"
+            : "h-0 md:h-full w-full md:w-0 border-0"
         )}
       >
         {/* Tree Top Bar */}
