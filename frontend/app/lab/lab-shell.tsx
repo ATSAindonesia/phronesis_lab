@@ -21,11 +21,11 @@ export default function LabShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+    <div className="flex flex-1 flex-col overflow-hidden min-w-0 bg-paper">
       {/* Default Header for regular lab pages */}
       <Header title="Research & Development" subtitle="Lab Phronesis" />
 
-      {/* Centered Content Container */}
+      {/* Content Container */}
       <main className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
         {children}
       </main>

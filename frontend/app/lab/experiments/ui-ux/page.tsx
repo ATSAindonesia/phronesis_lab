@@ -346,29 +346,29 @@ export default function UiUxPlaygroundPage() {
 
   const getFileBadge = (fileName: string) => {
     if (fileName.endsWith(".tsx") || fileName.endsWith(".jsx")) {
-      return { label: "TSX", color: "text-stone-600 border-stone-300 dark:text-zinc-400 dark:border-zinc-700" };
+      return { label: "TSX", color: "text-muted border-line-strong" };
     }
     if (fileName.endsWith(".css")) {
-      return { label: "CSS", color: "text-emerald-600 border-emerald-600/40 dark:text-emerald-400 dark:border-emerald-400/40" };
+      return { label: "CSS", color: "text-emerald-600 border-emerald-600/40" };
     }
-    return { label: "TS", color: "text-amber-600 border-amber-600/40 dark:text-amber-400 dark:border-amber-400/40" };
+    return { label: "TS", color: "text-gold-ink border-gold/40" };
   };
 
   return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden bg-stone-100 font-sans dark:bg-zinc-950 lg:flex-row">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-paper font-sans lg:flex-row">
 
       {/* ─── LEFT: AGENT SIDEPANEL ─── */}
-      <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
+      <aside className="flex w-full shrink-0 flex-col border-b border-line bg-card lg:h-full lg:w-80 lg:border-b-0 lg:border-r">
         {/* Header */}
-        <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-stone-200 px-4 dark:border-zinc-800">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-amber-600/30 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-400">
+        <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line px-4">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-gold/30 bg-gold/10 text-gold-ink">
             <Bot className="h-4 w-4" />
           </div>
           <div>
-            <div className="text-sm font-medium text-stone-900 dark:text-zinc-50">
+            <div className="text-sm font-medium text-ink">
               Agent Control
             </div>
-            <div className="text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+            <div className="text-[11px] font-medium text-muted">
               Coding agent workspace
             </div>
           </div>
@@ -377,18 +377,18 @@ export default function UiUxPlaygroundPage() {
         {/* Main Content Area (Suggestions, History, etc.) */}
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
           {isGenerating ? (
-            <div className="flex flex-col gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel p-3.5">
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-600 dark:bg-amber-400" />
-                <span className="text-sm font-medium text-stone-900 dark:text-zinc-50">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-gold" />
+                <span className="text-sm font-medium text-ink">
                   Agent is working
                 </span>
               </div>
-              <span className="font-mono text-[11px] leading-relaxed text-stone-500 dark:text-zinc-400">
+              <span className="font-mono text-[11px] leading-relaxed text-muted">
                 {generatingStatus.message || "Streaming code changes to the server sandbox..."}
               </span>
               {generatingStatus.filePath && (
-                <span className="font-mono text-[11px] text-stone-700 dark:text-zinc-300">
+                <span className="font-mono text-[11px] text-ink-soft">
                   {generatingStatus.filePath}
                   {generatingStatus.linesCount !== undefined && ` (${generatingStatus.linesCount} lines)`}
                 </span>
@@ -396,7 +396,7 @@ export default function UiUxPlaygroundPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+              <div className="flex items-center gap-2 text-[11px] font-medium text-muted">
                 <Activity className="h-3.5 w-3.5" />
                 <span>Try a suggestion</span>
               </div>
@@ -407,7 +407,7 @@ export default function UiUxPlaygroundPage() {
                     type="button"
                     disabled={isGenerating}
                     onClick={() => setPrompt(suggestion)}
-                    className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-stone-600 transition-colors hover:border-amber-600/40 hover:text-stone-900 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-400/40 dark:hover:text-zinc-100 cursor-pointer"
+                    className="rounded-md border border-line bg-card px-3 py-2 text-left text-[11px] font-medium leading-relaxed text-muted transition-colors hover:border-gold/50 hover:text-ink disabled:opacity-50 cursor-pointer"
                   >
                     {suggestion}
                   </button>
@@ -418,21 +418,21 @@ export default function UiUxPlaygroundPage() {
 
           {/* Last Run summary */}
           {agentActions.length > 0 && !isGenerating && (
-            <div className="flex flex-col gap-2 border-t border-stone-200 pt-4 dark:border-zinc-800">
-              <div className="flex items-center justify-between text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+            <div className="flex flex-col gap-2 border-t border-line pt-4">
+              <div className="flex items-center justify-between text-[11px] font-medium text-muted">
                 <span className="flex items-center gap-2"><Activity className="h-3.5 w-3.5" /> Last Run</span>
                 <span className="font-mono">{agentActions.length} actions</span>
               </div>
               <div className="flex flex-col gap-1">
                 {agentActions.map((action, idx) => (
-                  <div key={action.id ? `${action.id}-${idx}` : `action-${idx}`} className="flex items-center justify-between gap-2 font-mono text-[11px] text-stone-600 dark:text-zinc-400">
+                  <div key={action.id ? `${action.id}-${idx}` : `action-${idx}`} className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
                     <span className="truncate">{action.filePath || action.content.split("\n")[0]}</span>
-                    <span className={cn("shrink-0", action.status === "complete" ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-zinc-500")}>{action.type} · {action.status}</span>
+                    <span className={cn("shrink-0", action.status === "complete" ? "text-emerald-600" : "text-faint")}>{action.type} · {action.status}</span>
                   </div>
                 ))}
               </div>
               {agentThought && (
-                <p className="line-clamp-4 text-[11px] leading-relaxed text-stone-500 dark:text-zinc-400 hover:line-clamp-none">
+                <p className="line-clamp-4 text-[11px] leading-relaxed text-muted hover:line-clamp-none">
                   "{agentThought.split('\n').pop()}"
                 </p>
               )}
@@ -441,14 +441,14 @@ export default function UiUxPlaygroundPage() {
         </div>
 
         {/* Bottom Input Area */}
-        <div className="shrink-0 border-t border-stone-200 bg-stone-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="shrink-0 border-t border-line bg-panel p-4">
           <form
             onSubmit={handleGenerate}
             className={cn(
-              "flex flex-col gap-3 rounded-lg border bg-white p-3 transition-colors dark:bg-zinc-900 focus-within:ring-2 focus-within:ring-amber-600/40 focus-within:border-amber-600/60 dark:focus-within:ring-amber-400/40 dark:focus-within:border-amber-400/60",
+              "flex flex-col gap-3 rounded-lg border bg-card p-3 transition-colors focus-within:ring-2 focus-within:ring-gold/30 focus-within:border-gold",
               isGenerating
-                ? "border-amber-600/60 dark:border-amber-400/60"
-                : "border-stone-200 dark:border-zinc-800"
+                ? "border-gold"
+                : "border-line"
             )}
           >
             <textarea
@@ -463,21 +463,21 @@ export default function UiUxPlaygroundPage() {
                   : "Instruct the agent to build or modify UI..."
               }
               rows={4}
-              className="w-full resize-none bg-transparent text-sm leading-relaxed text-stone-900 placeholder:text-stone-400 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-500 disabled:opacity-60"
+              className="w-full resize-none bg-transparent text-sm leading-relaxed text-ink placeholder:text-faint focus:outline-none disabled:opacity-60"
             />
 
             <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-1.5 text-stone-400 dark:text-zinc-500">
-                <Bot className={cn("h-4 w-4", isGenerating ? "text-amber-600 dark:text-amber-400" : "")} />
+              <div className="flex items-center gap-1.5 text-faint">
+                <Bot className={cn("h-4 w-4", isGenerating ? "text-gold-ink" : "")} />
               </div>
               <button
                 type="submit"
                 disabled={!prompt.trim() || isGenerating || isBooting}
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-md px-4 text-xs font-medium text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex h-8 items-center gap-2 rounded-md px-4 text-xs font-medium text-ink transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   prompt.trim() && !isGenerating && !isBooting
-                    ? "bg-amber-600 hover:bg-amber-700 active:bg-amber-700 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400"
-                    : "cursor-not-allowed bg-stone-200 text-stone-400 dark:bg-zinc-800 dark:text-zinc-500"
+                    ? "bg-gold hover:bg-gold-ink active:bg-gold-ink"
+                    : "cursor-not-allowed bg-accent text-faint"
                 )}
               >
                 {isBooting ? (
@@ -503,32 +503,32 @@ export default function UiUxPlaygroundPage() {
       </aside>
 
       {/* ─── RIGHT: MAIN WORKSPACE ─── */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-stone-100 dark:bg-zinc-950">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-paper">
         {/* ─── 1. EXPERIMENT HEADER BAR ─── */}
-        <header className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900 lg:h-12 lg:flex-nowrap lg:py-0 sm:px-4 shrink-0">
+        <header className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-4 py-2 lg:h-12 lg:flex-nowrap lg:py-0 sm:px-4 shrink-0">
           {/* Left: Navigation, Title & Live Status */}
           <div className="flex min-w-0 items-center gap-3">
             <Link
               href="/lab/experiments"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-line bg-card text-muted transition-colors hover:bg-paper hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
               title="Back to Experiments"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
             </Link>
 
-            <div className="hidden h-5 w-px bg-stone-200 dark:bg-zinc-800 sm:block" />
+            <div className="hidden h-5 w-px bg-accent sm:block" />
 
             <div className="flex min-w-0 flex-col">
               <div className="flex items-center gap-2">
-                <h1 className="truncate text-sm font-medium text-stone-900 dark:text-zinc-50">
+                <h1 className="truncate text-sm font-medium text-ink">
                   Coding Agent Workspace
                 </h1>
-                <span className="hidden shrink-0 items-center gap-1 rounded-md border border-stone-200 px-1.5 py-0.5 font-mono text-[11px] font-medium text-stone-500 dark:border-zinc-700 dark:text-zinc-400 sm:inline-flex">
+                <span className="hidden shrink-0 items-center gap-1 rounded-md border border-line px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted sm:inline-flex">
                   Docker Sandbox
                 </span>
               </div>
-              <p className="truncate max-w-[280px] text-[11px] text-stone-500 dark:text-zinc-400 sm:max-w-md">
-                Active: <span className="font-medium text-stone-700 dark:text-zinc-300">{currentPromptTitle}</span>
+              <p className="truncate max-w-[280px] text-[11px] text-muted sm:max-w-md">
+                Active: <span className="font-medium text-ink-soft">{currentPromptTitle}</span>
               </p>
             </div>
           </div>
@@ -536,15 +536,15 @@ export default function UiUxPlaygroundPage() {
           {/* Center: Viewport & View Mode Toggles */}
           <div className="flex items-center gap-2">
             {/* Viewport size switcher */}
-            <div className="hidden items-center gap-0.5 rounded-md border border-stone-200 bg-stone-100 p-0.5 dark:border-zinc-800 dark:bg-zinc-950 lg:flex">
+            <div className="hidden items-center gap-0.5 rounded-md border border-line bg-paper p-0.5 lg:flex">
               <button
                 type="button"
                 onClick={() => setViewportSize("desktop")}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   viewportSize === "desktop"
-                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    ? "bg-ink text-ink"
+                    : "text-muted hover:text-ink"
                 )}
                 title="Full Width Desktop View"
               >
@@ -555,10 +555,10 @@ export default function UiUxPlaygroundPage() {
                 type="button"
                 onClick={() => setViewportSize("tablet")}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   viewportSize === "tablet"
-                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    ? "bg-ink text-ink"
+                    : "text-muted hover:text-ink"
                 )}
                 title="Tablet View (768px)"
               >
@@ -569,10 +569,10 @@ export default function UiUxPlaygroundPage() {
                 type="button"
                 onClick={() => setViewportSize("mobile")}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   viewportSize === "mobile"
-                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    ? "bg-ink text-ink"
+                    : "text-muted hover:text-ink"
                 )}
                 title="Mobile View (375px)"
               >
@@ -582,15 +582,15 @@ export default function UiUxPlaygroundPage() {
             </div>
 
             {/* View Mode Toggle: Preview vs Code vs Terminal / Activity */}
-            <div className="flex items-center gap-0.5 rounded-md border border-stone-200 bg-stone-100 p-0.5 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-center gap-0.5 rounded-md border border-line bg-paper p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode("preview")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   viewMode === "preview"
-                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    ? "bg-ink text-ink"
+                    : "text-muted hover:text-ink"
                 )}
               >
                 <Eye className="h-3.5 w-3.5" />
@@ -601,10 +601,10 @@ export default function UiUxPlaygroundPage() {
                 type="button"
                 onClick={() => setViewMode("code")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   viewMode === "code"
-                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    ? "bg-ink text-ink"
+                    : "text-muted hover:text-ink"
                 )}
               >
                 <Code2 className="h-3.5 w-3.5" />
@@ -615,16 +615,16 @@ export default function UiUxPlaygroundPage() {
                 type="button"
                 onClick={() => setViewMode("activity")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                   viewMode === "activity"
-                    ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-stone-500 hover:text-stone-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    ? "bg-ink text-ink"
+                    : "text-muted hover:text-ink"
                 )}
               >
                 <TerminalIcon className="h-3.5 w-3.5" />
                 <span>Terminal</span>
                 {agentActions.length > 0 && (
-                  <span className="rounded-md border border-stone-300 px-1 font-mono text-[10px] text-stone-500 dark:border-zinc-700 dark:text-zinc-400">
+                  <span className="rounded-md border border-line-strong px-1 font-mono text-[10px] text-muted">
                     {agentActions.length}
                   </span>
                 )}
@@ -637,14 +637,14 @@ export default function UiUxPlaygroundPage() {
             <button
               type="button"
               onClick={handleReset}
-              className="flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+              className="flex items-center gap-1.5 rounded-md border border-line bg-card px-2.5 py-1.5 text-[11px] font-medium text-muted transition-colors hover:bg-paper hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 cursor-pointer"
               title="Reset to default project"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Reset</span>
             </button>
 
-            <div className="h-5 w-px bg-stone-200 dark:bg-zinc-800" />
+            <div className="h-5 w-px bg-accent" />
 
             <LogoutButton />
           </div>
@@ -653,10 +653,10 @@ export default function UiUxPlaygroundPage() {
         {/* ─── 2. MAIN EXPERIMENT WORKSPACE ─── */}
         <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           {/* Project Files Navigation Bar */}
-          <div className="flex h-9 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-line bg-card px-3">
             {/* File Tabs */}
             <div className="flex flex-nowrap items-center gap-1 overflow-x-auto pr-2">
-              <span className="flex shrink-0 items-center gap-1 pr-1.5 text-[11px] font-medium text-stone-500 dark:text-zinc-400">
+              <span className="flex shrink-0 items-center gap-1 pr-1.5 text-[11px] font-medium text-muted">
                 <FolderTree className="h-3.5 w-3.5" />
                 <span className="font-mono">VFS</span>
               </span>
@@ -673,16 +673,16 @@ export default function UiUxPlaygroundPage() {
                       if (viewMode === "activity") setViewMode("code");
                     }}
                     className={cn(
-                      "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                      "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                       isSelected
-                        ? "bg-stone-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                        : "text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                        ? "bg-ink text-ink"
+                        : "text-muted hover:bg-paper hover:text-ink"
                     )}
                   >
-                    <FileCode2 className={cn("h-3.5 w-3.5", isSelected ? "text-amber-400" : "text-stone-400 dark:text-zinc-500")} />
+                    <FileCode2 className={cn("h-3.5 w-3.5", isSelected ? "text-gold-ink" : "text-faint")} />
                     <span className="font-mono">{fileName}</span>
                     {isModified && (
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600 dark:bg-amber-400" title="Updated by Agent" />
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold" title="Updated by Agent" />
                     )}
                     <span className={cn("rounded border px-1 font-mono text-[10px]", badge.color)}>
                       {badge.label}
@@ -697,12 +697,12 @@ export default function UiUxPlaygroundPage() {
               <button
                 type="button"
                 onClick={handleCopyCode}
-                className="ml-2 flex shrink-0 items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+                className="ml-2 flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-card px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-paper hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 cursor-pointer"
               >
                 {copied ? (
                   <>
-                    <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">Copied</span>
+                    <Check className="h-3 w-3 text-emerald-600" />
+                    <span className="font-medium text-emerald-600">Copied</span>
                   </>
                 ) : (
                   <>
@@ -715,14 +715,14 @@ export default function UiUxPlaygroundPage() {
           </div>
 
           {/* Workspace Display Area */}
-          <div className="flex min-h-0 w-full flex-1 items-stretch justify-center overflow-hidden bg-stone-200/50 dark:bg-zinc-950">
+          <div className="flex min-h-0 w-full flex-1 items-stretch justify-center overflow-hidden bg-accent/50">
             {viewMode === "preview" ? (
               /* Live Sandbox Preview (iframe ke dev server di Docker) */
               <div
                 className={cn(
                   "h-full w-full overflow-hidden",
-                  viewportSize === "mobile" && "mx-auto max-w-[375px] border-x border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900",
-                  viewportSize === "tablet" && "mx-auto max-w-[768px] border-x border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900",
+                  viewportSize === "mobile" && "mx-auto max-w-[375px] border-x border-line bg-card",
+                  viewportSize === "tablet" && "mx-auto max-w-[768px] border-x border-line bg-card",
                   viewportSize === "desktop" && "w-full"
                 )}
               >
@@ -748,10 +748,10 @@ export default function UiUxPlaygroundPage() {
               </div>
             ) : viewMode === "code" ? (
               /* Code Editor with Line Numbers */
-              <div className="relative flex h-full w-full overflow-hidden bg-zinc-950">
+              <div className="relative flex h-full w-full overflow-hidden bg-night">
                 <div
                   ref={lineNumbersRef}
-                  className="flex shrink-0 select-none flex-col overflow-hidden border-r border-zinc-800 bg-zinc-950 py-3 pl-3 pr-2 text-right font-mono text-[12px] leading-[18px] text-zinc-600"
+                  className="flex shrink-0 select-none flex-col overflow-hidden border-r border-white/10 bg-night py-3 pl-3 pr-2 text-right font-mono text-[12px] leading-[18px] text-faint"
                   style={{ width: "3.5rem" }}
                 >
                   {contentLines.map((_, i) => (
@@ -766,22 +766,22 @@ export default function UiUxPlaygroundPage() {
                   value={activeFile?.content || ""}
                   onScroll={handleEditorScroll}
                   spellCheck={false}
-                  className="h-full w-full resize-none overflow-auto whitespace-pre bg-zinc-950 py-3 px-4 font-mono text-[12px] leading-[18px] text-zinc-200 selection:bg-amber-600/30 focus:outline-none"
+                  className="h-full w-full resize-none overflow-auto whitespace-pre bg-night py-3 px-4 font-mono text-[12px] leading-[18px] text-paper selection:bg-gold/30 focus:outline-none"
                 />
               </div>
             ) : (
               /* Terminal & Agent Activity Split View */
-              <div className="flex h-full w-full flex-col overflow-hidden bg-zinc-950">
+              <div className="flex h-full w-full flex-col overflow-hidden bg-night">
                 {/* Activity Subtabs */}
-                <div className="flex h-9 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900 px-3">
+                <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/10 bg-ink px-3">
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setActivitySubTab("terminal")}
                       className={cn(
-                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                         activitySubTab === "terminal"
-                          ? "bg-zinc-100 text-zinc-900"
-                          : "text-zinc-400 hover:text-zinc-200"
+                          ? "bg-accent text-ink"
+                          : "text-faint hover:text-paper"
                       )}
                     >
                       <TerminalIcon className="h-3.5 w-3.5" />
@@ -790,10 +790,10 @@ export default function UiUxPlaygroundPage() {
                     <button
                       onClick={() => setActivitySubTab("actions")}
                       className={cn(
-                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/50",
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40",
                         activitySubTab === "actions"
-                          ? "bg-zinc-100 text-zinc-900"
-                          : "text-zinc-400 hover:text-zinc-200"
+                          ? "bg-accent text-ink"
+                          : "text-faint hover:text-paper"
                       )}
                     >
                       <Activity className="h-3.5 w-3.5" />
@@ -810,12 +810,12 @@ export default function UiUxPlaygroundPage() {
                     <div className="h-full w-full space-y-2.5 overflow-y-auto pr-1">
                       {/* Agent Thinking Card */}
                       {agentThought && (
-                        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3.5">
-                          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-200">
-                            <Bot className="h-4 w-4 text-amber-400" />
+                        <div className="rounded-lg border border-white/10 bg-ink p-3.5">
+                          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-paper">
+                            <Bot className="h-4 w-4 text-gold" />
                             <span>Agent Strategy & Thoughts</span>
                           </div>
-                          <p className="text-xs leading-relaxed whitespace-pre-wrap text-zinc-400">
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap text-faint">
                             {agentThought}
                           </p>
                         </div>
@@ -823,7 +823,7 @@ export default function UiUxPlaygroundPage() {
 
                       {/* Action Items List */}
                       {agentActions.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-500">
+                        <div className="flex flex-col items-center justify-center p-12 text-center text-faint">
                           <Activity className="mb-2 h-8 w-8 opacity-40" />
                           <p className="text-xs">No agent actions recorded yet. Submit a prompt to start.</p>
                         </div>
@@ -835,8 +835,8 @@ export default function UiUxPlaygroundPage() {
                             <div
                               key={uniqueKey}
                               className={cn(
-                                "rounded-lg border border-zinc-800 bg-zinc-900 p-3",
-                                isExpanded && "ring-1 ring-amber-400/40"
+                                "rounded-lg border border-white/10 bg-ink p-3",
+                                isExpanded && "ring-1 ring-gold/40"
                               )}
                             >
                               <div className="flex items-center justify-between gap-2">
@@ -845,8 +845,8 @@ export default function UiUxPlaygroundPage() {
                                     className={cn(
                                       "shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]",
                                       action.type === "file"
-                                        ? "border-amber-400/40 text-amber-400"
-                                        : "border-zinc-700 text-zinc-400"
+                                        ? "border-gold/40 text-gold"
+                                        : "border-white/15 text-faint"
                                     )}
                                   >
                                     {action.type}
@@ -854,7 +854,7 @@ export default function UiUxPlaygroundPage() {
                                   {action.filePath && (
                                     <button
                                       onClick={() => handleSwitchToFile(action.filePath!)}
-                                      className="truncate font-mono text-xs text-zinc-300 hover:text-amber-400 hover:underline cursor-pointer"
+                                      className="truncate font-mono text-xs text-faint hover:text-gold hover:underline cursor-pointer"
                                     >
                                       {action.filePath}
                                     </button>
@@ -865,7 +865,7 @@ export default function UiUxPlaygroundPage() {
                                     "shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]",
                                     action.status === "complete"
                                       ? "border-emerald-400/40 text-emerald-400"
-                                      : "border-amber-400/40 text-amber-400"
+                                      : "border-gold/40 text-gold"
                                   )}
                                 >
                                   {action.status}
@@ -873,7 +873,7 @@ export default function UiUxPlaygroundPage() {
                               </div>
 
                               {action.content && action.type === "shell" && (
-                                <div className="mt-2 rounded border border-zinc-800 bg-zinc-950 p-2 font-mono text-xs text-zinc-300">
+                                <div className="mt-2 rounded border border-white/10 bg-night p-2 font-mono text-xs text-faint">
                                   $ {action.content}
                                 </div>
                               )}
@@ -891,7 +891,7 @@ export default function UiUxPlaygroundPage() {
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="flex shrink-0 items-center justify-between border-t border-rose-600/40 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-600 dark:border-rose-400/40 dark:bg-rose-950/50 dark:text-rose-400">
+          <div className="flex shrink-0 items-center justify-between border-t border-rose-400 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-600">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{errorMessage}</span>
@@ -899,7 +899,7 @@ export default function UiUxPlaygroundPage() {
             <button
               type="button"
               onClick={() => setErrorMessage(null)}
-              className="rounded-md p-1 transition-colors hover:bg-rose-100 cursor-pointer dark:hover:bg-rose-900/50"
+              className="rounded-md p-1 transition-colors hover:bg-rose-100 cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>

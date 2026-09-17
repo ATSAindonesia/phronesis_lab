@@ -17,7 +17,7 @@ export default async function LabLayout({
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950 font-sans">
+    <div className="flex h-screen w-full overflow-hidden bg-paper font-sans">
       {/* Sidebar */}
       <Sidebar />
 

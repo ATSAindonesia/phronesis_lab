@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Domain publik (via cloudflared tunnel) harus di-whitelist biar resource
+  // dev Next.js (JS chunk + HMR) gak ke-block cross-origin.
+  allowedDevOrigins: ["lab.phronesis.my.id"],
   async redirects() {
     // /lab/builder diganti jadi /lab/chat (builder backend tetap hidup
     // buat experiment ui-ux).

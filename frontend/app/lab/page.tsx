@@ -1,113 +1,170 @@
 import React from "react";
+import Link from "next/link";
 import {
-  FlaskConical,
-  Sparkles,
+  ArrowRight,
   ArrowUpRight,
-  Cpu,
-  Layers,
-  CheckCircle2,
+  MessageSquare,
+  Boxes,
   Terminal,
 } from "lucide-react";
 
+const MODELS = [
+  "Qwen 3 Coder",
+  "GLM 4.6",
+  "DeepSeek V3",
+  "Kimi K2",
+  "Llama 4",
+  "GPT-5",
+  "Claude Sonnet 4.5",
+  "Gemini 2.5 Pro",
+];
+
+const FEATURES = [
+  {
+    icon: MessageSquare,
+    title: "Unified Model API",
+    body: "One streaming endpoint routes every upstream. Reasoning traces, model picker, and per-conversation history stored in the lab database.",
+    href: "/lab/chat",
+    cta: "Open Chat",
+  },
+  {
+    icon: Boxes,
+    title: "Sandbox Builder",
+    body: "A design agent that ships React + Tailwind interfaces into a live Vite sandbox. Inspect code, terminal, and preview in one workspace.",
+    href: "/lab/experiments/ui-ux",
+    cta: "Run Experiment",
+  },
+  {
+    icon: Terminal,
+    title: "Research Console",
+    body: "Pipelines, tensors, and benchmarks — interactively. Every run is versioned, reproducible, and connected to compute nodes.",
+    href: "/lab/experiments",
+    cta: "Explore",
+  },
+];
+
 export default function LabPage() {
   return (
-    <div className="w-full max-w-3xl rounded-3xl border border-zinc-200/80 bg-white/80 p-8 shadow-xl shadow-zinc-950/5 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:shadow-black/40 transition-all">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 pb-6 dark:border-zinc-800">
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25">
-            <FlaskConical className="h-7 w-7" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-                Phronesis Lab Hub
-              </h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
-                <Sparkles className="h-3 w-3" />
-                Active Node
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-12 py-6">
+      {/* Model marquee — b.ai ticker */}
+      <div className="marquee rounded-lg border border-line bg-card py-2.5">
+        <div className="marquee-track">
+          {[...MODELS, ...MODELS].map((m, i) => (
+            <span
+              key={`${m}-${i}`}
+              className="mx-5 flex items-center gap-2.5 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.14em] text-muted"
+            >
+              <span className="h-1 w-1 rounded-full bg-gold" />
+              {m}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Hero — giant editorial display */}
+      <section className="flex flex-col gap-6">
+        <span className="label-caps">Phronesis Lab — Research Environment</span>
+        <h1 className="hero-display text-5xl text-ink sm:text-6xl lg:text-7xl">
+          Infrastructure
+          <br />
+          for thinking
+          <br />
+          <span className="text-faint">agents.</span>
+        </h1>
+        <p className="max-w-md text-sm leading-relaxed text-muted">
+          Access global models through one borderless pipeline. Prototype
+          interfaces with an agent, benchmark them in a sandbox, and ship what
+          survives.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/lab/chat"
+            className="inline-flex h-11 items-center gap-2 rounded-lg bg-ink px-6 text-sm font-medium text-paper transition-all hover:bg-black active:scale-[0.98]"
+          >
+            Try the lab
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link
+            href="/lab/experiments"
+            className="inline-flex h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-6 text-sm font-medium text-ink transition-all hover:bg-accent active:scale-[0.98]"
+          >
+            New experiment
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+
+      {/* Stats strip — hairline separated, display numbers */}
+      <section className="grid grid-cols-1 divide-y divide-line rounded-lg border border-line bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        {[
+          { value: "4", unit: "instances", label: "Active Models" },
+          { value: "28%", unit: "gpu allocation", label: "Compute Load" },
+          { value: "99.2%", unit: "f1 score", label: "Accuracy Benchmark" },
+        ].map((s) => (
+          <div key={s.label} className="flex flex-col gap-2 px-6 py-5">
+            <span className="label-caps">{s.label}</span>
+            <div className="font-display text-3xl font-medium tracking-tight text-ink">
+              {s.value}{" "}
+              <span className="font-mono text-[11px] font-normal lowercase tracking-normal text-faint">
+                {s.unit}
               </span>
             </div>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Welcome to the central research environment. All experimental pipelines are ready.
-            </p>
           </div>
-        </div>
+        ))}
+      </section>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <span className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Authenticated
-          </span>
-        </div>
-      </div>
+      {/* Feature cards — editorial 3-up, b.ai grid */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {FEATURES.map((f) => {
+          const Icon = f.icon;
+          return (
+            <Link
+              key={f.title}
+              href={f.href}
+              className="group hairline-card flex flex-col gap-4 p-6 transition-all hover:border-line-strong hover:shadow-[0_20px_50px_-30px_rgba(20,20,19,0.35)]"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-panel text-ink transition-colors group-hover:bg-ink group-hover:text-gold">
+                <Icon className="h-[18px] w-[18px]" />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-medium tracking-tight text-ink">
+                  {f.title}
+                </h3>
+                <p className="mt-2 text-[13px] leading-relaxed text-muted">
+                  {f.body}
+                </p>
+              </div>
+              <span className="label-caps mt-auto flex items-center gap-1.5 text-gold-ink">
+                {f.cta}
+                <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+          );
+        })}
+      </section>
 
-      {/* Metric Cards Grid */}
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800/60 dark:bg-zinc-950/40">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium">Active Models</span>
-            <Cpu className="h-4 w-4 text-blue-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            4 <span className="text-xs font-normal text-zinc-400">instances</span>
-          </div>
-          <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-            +1 loaded recently
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800/60 dark:bg-zinc-950/40">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium">Compute Load</span>
-            <Layers className="h-4 w-4 text-indigo-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            28% <span className="text-xs font-normal text-zinc-400">GPU allocation</span>
-          </div>
-          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-            Optimal temperature
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-100 bg-zinc-50/70 p-4 dark:border-zinc-800/60 dark:bg-zinc-950/40">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium">Accuracy Benchmark</span>
-            <Sparkles className="h-4 w-4 text-violet-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            99.2% <span className="text-xs font-normal text-zinc-400">F1 score</span>
-          </div>
-          <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-            Top tier performance
-          </p>
-        </div>
-      </div>
-
-      {/* Action shortcuts */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 dark:border-blue-500/10 dark:bg-blue-950/20">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500 text-white">
-            <Terminal className="h-4 w-4" />
-          </div>
+      {/* Bottom black band — b.ai footer slab */}
+      <section className="rounded-xl bg-night px-8 py-10 text-paper">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-              Interactive Experimentation Console
-            </div>
-            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              Run inference tests and inspect tensors directly in real-time.
-            </div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#979797]">
+              Status — all systems nominal
+            </p>
+            <h2 className="mt-3 font-display text-2xl font-medium tracking-tight sm:text-3xl">
+              Authenticated. Nodes online.
+              <br />
+              <span className="text-[#979797]">Ready to research.</span>
+            </h2>
           </div>
+          <Link
+            href="/lab/chat"
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-lg border border-white/20 px-5 text-sm font-medium text-paper transition-colors hover:border-gold hover:text-gold"
+          >
+            Enter Chat
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
         </div>
-
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-600/30 transition-all hover:bg-blue-700 active:scale-95 cursor-pointer"
-        >
-          <span>New Run</span>
-          <ArrowUpRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      </section>
     </div>
   );
 }
