@@ -9,9 +9,10 @@ export default function LabShell({ children }: { children: React.ReactNode }) {
   const isUiUxPage = pathname === "/lab/experiments/ui-ux";
   const isChatPage = pathname === "/lab/chat";
   const isFilesPage = pathname === "/lab/files" || pathname?.startsWith("/lab/files/");
+  const isCommandsPage = pathname === "/lab/commands" || pathname?.startsWith("/lab/commands/");
 
-  if (isUiUxPage || isChatPage || isFilesPage) {
-    // Fullscreen pages (UI/UX experiment + chat + files):
+  if (isUiUxPage || isChatPage || isFilesPage || isCommandsPage) {
+    // Fullscreen pages (UI/UX experiment + chat + files + command sets):
     // The header is integrated directly as part of the page itself,
     // maximizing screen space.
     return (

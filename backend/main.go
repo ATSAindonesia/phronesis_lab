@@ -10,6 +10,7 @@ import (
 	"lab/internal/auth"
 	"lab/internal/builder"
 	"lab/internal/chat"
+	"lab/internal/commands"
 	"lab/internal/experiments"
 	"lab/internal/files"
 	"lab/internal/shared/config"
@@ -51,6 +52,10 @@ func main() {
 	// di dalam PROJECT_ROOT.
 	filesHandler := files.NewHandler()
 	filesHandler.RegisterRoutes(mux)
+
+	// Command Sets (/lab/commands): CRUD command bash per service -> judul -> command.
+	commandsHandler := commands.NewHandler(db)
+	commandsHandler.RegisterRoutes(mux, authHandler.Middleware)
 
 	// Contoh endpoint terproteksi
 	mux.Handle("GET /api/me", authHandler.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
