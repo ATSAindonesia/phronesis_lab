@@ -447,7 +447,7 @@ export default function CommandSetsPage() {
   const showCommandsPanel = !!titleId;
 
   return (
-    <div className="flex h-full w-full min-h-0 flex-col overflow-hidden bg-paper">
+    <div className="cmdsets-theme flex h-full w-full min-h-0 flex-col overflow-hidden bg-paper text-ink">
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-background/80 px-4 backdrop-blur-sm">
         <div className="flex min-w-0 items-center gap-2">
@@ -489,7 +489,7 @@ export default function CommandSetsPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gold" />}
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gold-ink" />}
           <button
             type="button"
             title="Muat ulang"
@@ -554,7 +554,7 @@ export default function CommandSetsPage() {
 
           {loadingServices ? (
             <div className="flex items-center justify-center gap-2 p-6 font-mono text-xs text-muted">
-              <Loader2 className="h-4 w-4 animate-spin text-gold" /> memuat…
+              <Loader2 className="h-4 w-4 animate-spin text-gold-ink" /> memuat…
             </div>
           ) : services.length === 0 ? (
             <EmptyState
@@ -691,7 +691,7 @@ export default function CommandSetsPage() {
 
               {loadingDetail ? (
                 <div className="flex items-center justify-center gap-2 p-6 font-mono text-xs text-muted">
-                  <Loader2 className="h-4 w-4 animate-spin text-gold" /> memuat…
+                  <Loader2 className="h-4 w-4 animate-spin text-gold-ink" /> memuat…
                 </div>
               ) : (detail?.titles.length ?? 0) === 0 ? (
                 <EmptyState
@@ -837,7 +837,7 @@ export default function CommandSetsPage() {
 
               {loadingTitle ? (
                 <div className="flex items-center justify-center gap-2 p-6 font-mono text-xs text-muted">
-                  <Loader2 className="h-4 w-4 animate-spin text-gold" /> memuat…
+                  <Loader2 className="h-4 w-4 animate-spin text-gold-ink" /> memuat…
                 </div>
               ) : (titleDetail?.commands.length ?? 0) === 0 ? (
                 <EmptyState

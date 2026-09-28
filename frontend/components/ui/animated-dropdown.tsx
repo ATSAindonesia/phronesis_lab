@@ -113,9 +113,8 @@ export default function AnimatedDropdown({
               className={cn(
                 'absolute top-[calc(100%+0.5rem)] left-1/2 z-50 w-fit min-w-full -translate-x-1/2',
                 'overflow-y-auto overscroll-contain lab-dropdown-scroll',
-                'rounded-md',
-                'bg-card',
-                'border-2 border-line',
+                'bg-[#F5DABF]',
+                'border-2 border-[#0F3D3A]',
                 'shadow-lg'
               )}
             >
@@ -144,7 +143,7 @@ export default function AnimatedDropdown({
                         {item.active && <Check className='h-3.5 w-3.5 shrink-0' />}
                       </span>
                       {item.description && (
-                        <span className='mt-0.5 block text-[10px] text-faint'>
+                        <span className='mt-0.5 block text-[10px] text-[#0F3D3A]/50'>
                           {item.description}
                         </span>
                       )}
@@ -152,11 +151,11 @@ export default function AnimatedDropdown({
                   )
                   const itemClass = cn(
                     'inline-block w-full px-3 py-2 text-sm text-left',
-                    'border-b-2 border-line last:border-b-0',
-                    'bg-panel hover:bg-accent',
+                    'border-b-2 border-[#0F3D3A]/20 last:border-b-0',
+                    'bg-[#F5DABF] hover:bg-[#0F3D3A]/5',
                     'transition-colors duration-150',
-                    'text-foreground no-underline',
-                    item.active && 'text-gold-ink'
+                    'text-[#0F3D3A] no-underline',
+                    item.active && 'text-[#6C151E]'
                   )
                   return item.link ? (
                     <motion.a

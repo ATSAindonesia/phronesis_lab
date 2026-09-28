@@ -1,17 +1,33 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isSessionAlive } from "./lib/session";
 
+// Penengah tunggal session seluruh website lab (Next proxy = middleware).
+// - Tanpa sesi valid (hilang/rusak/expired): semua halaman -> /login?next=...
+//   (obat bug redirect nyasar: setelah login user kembali ke halaman semula).
+// - Sesi valid membuka /login atau /: langsung -> /lab.
+// API (/api/*) tidak lewat sini — dijaga per-route oleh require-session.
+// Catatan: gate navigasi cek klaim exp; otoritas penuh tetap di backend
+// (JWT middleware) + guard proxy require-session (data-plane).
 export function proxy(request: NextRequest) {
-  const session = request.cookies.get("session");
+  const { pathname, search } = request.nextUrl;
+  const token = request.cookies.get("session")?.value;
+  const alive = isSessionAlive(token);
+  const isLogin = pathname === "/login";
 
-  if (!session?.value) {
-    const url = new URL("/login", request.url);
+  if (!alive) {
+    if (isLogin) return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    if (pathname !== "/") url.searchParams.set("next", pathname + search);
     return NextResponse.redirect(url);
   }
 
-  // Jika sudah login dan mengakses root "/", arahkan ke /lab
-  if (request.nextUrl.pathname === "/") {
-    const url = new URL("/lab", request.url);
+  if (isLogin || pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/lab";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 
@@ -19,5 +35,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/lab/:path*"],
+  matcher: ["/", "/login", "/lab/:path*"],
 };

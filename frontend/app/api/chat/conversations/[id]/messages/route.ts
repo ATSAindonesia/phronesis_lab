@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { chatBackend } from "@/lib/chat-history";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ export async function POST(
   request: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const denied = await requireSession();
+  if (denied) return denied;
   const { id } = await ctx.params;
   let body: unknown;
   try {

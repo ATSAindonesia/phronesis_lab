@@ -1,5 +1,7 @@
 package auth
 
+import "time"
+
 type CreateUserRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
@@ -12,9 +14,11 @@ type LoginRequest struct {
 }
 
 type UserResponse struct {
-	UUID  string `json:"uuid"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	UUID      string    `json:"uuid" db:"uuid"`
+	Name      string    `json:"name" db:"name"`
+	Email     string    `json:"email" db:"email"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type LoginResponse struct {

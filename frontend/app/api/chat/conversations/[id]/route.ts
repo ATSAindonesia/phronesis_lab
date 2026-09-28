@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { chatBackend } from "@/lib/chat-history";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,8 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // GET /api/chat/conversations/[id] — detail percakapan + semua pesannya.
 export async function GET(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   const { id } = await ctx.params;
   return chatBackend(
     request,
@@ -16,6 +19,8 @@ export async function GET(request: NextRequest, ctx: Ctx) {
 
 // PATCH /api/chat/conversations/[id] — ganti judul { title: string }.
 export async function PATCH(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   const { id } = await ctx.params;
   let body: unknown = {};
   try {
@@ -32,6 +37,8 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 
 // DELETE /api/chat/conversations/[id] — hapus percakapan (+ pesannya).
 export async function DELETE(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   const { id } = await ctx.params;
   return chatBackend(
     request,

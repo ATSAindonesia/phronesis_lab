@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -10,6 +11,8 @@ const PLATFORM_URL = process.env.BUILDER_API_URL ?? "http://localhost:8081";
 const API_KEY = process.env.BUILDER_API_KEY ?? "lab-local";
 
 export async function POST(request: Request) {
+  const denied = await requireSession();
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();

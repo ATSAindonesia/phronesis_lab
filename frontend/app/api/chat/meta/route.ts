@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,8 @@ const PLATFORM_URL = process.env.BUILDER_API_URL ?? "http://localhost:8081";
 const API_KEY = process.env.BUILDER_API_KEY ?? "lab-local";
 
 export async function GET() {
+  const denied = await requireSession();
+  if (denied) return denied;
   try {
     const res = await fetch(
       `${PLATFORM_URL.replace(/\/+$/, "")}/v1/chat/meta`,

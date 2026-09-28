@@ -187,10 +187,13 @@ func TestKeenableProviderParsesResults(t *testing.T) {
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
 			t.Errorf("content-type = %q", got)
 		}
-		var body map[string]string
+		var body map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["query"] != "go generics" {
 			t.Errorf("query diteruskan salah: %q", body["query"])
+		}
+		if _, ok := body["max_results"]; !ok {
+			t.Errorf("max_results harus dikirim ke provider")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"results":[
@@ -237,8 +240,12 @@ func TestKeenableProviderHTTPError(t *testing.T) {
 
 func TestSearchProviderFromEnv(t *testing.T) {
 	t.Setenv("SEARCH_PROVIDER", "keenable")
-	if _, ok := searchProviderFromEnv().(*KeenableSearchProvider); !ok {
-		t.Fatal("SEARCH_PROVIDER=keenable harus bikin KeenableSearchProvider")
+	p, ok := searchProviderFromEnv().(*MultiSearchProvider)
+	if !ok {
+		t.Fatal("SEARCH_PROVIDER=keenable harus bikin MultiSearchProvider (keenable + fallback gratis)")
+	}
+	if p.primary.Name() != "keenable" {
+		t.Fatalf("primary = %q, want keenable", p.primary.Name())
 	}
 	t.Setenv("SEARCH_PROVIDER", "")
 	if _, ok := searchProviderFromEnv().(UnconfiguredSearchProvider); !ok {

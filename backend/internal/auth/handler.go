@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -15,12 +16,47 @@ func NewHandler(service *Service) *Handler {
 }
 
 // RegisterRoutes memasang endpoint auth pada mux.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+// Login/register publik tanpa proteksi; route /v1/users (CRUD settings)
+// dibungkus requireKey + JWT middleware, pola sama dengan commands.
+func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
 	mux.HandleFunc("POST /api/auth/login", h.Login)
 	mux.HandleFunc("POST /api/auth/register", h.Register)
+
+	wrap := func(next http.Handler) http.Handler {
+		return h.requireKey(authMW(next))
+	}
+
+	mux.Handle("GET /v1/users", wrap(http.HandlerFunc(h.ListUsers)))
+	mux.Handle("POST /v1/users", wrap(http.HandlerFunc(h.CreateUser)))
+	mux.Handle("GET /v1/users/me", wrap(http.HandlerFunc(h.Me)))
+	mux.Handle("GET /v1/users/{id}", wrap(http.HandlerFunc(h.GetUser)))
+	mux.Handle("PATCH /v1/users/{id}", wrap(http.HandlerFunc(h.UpdateUser)))
+	mux.Handle("POST /v1/users/{id}/password", wrap(http.HandlerFunc(h.SetPassword)))
+	mux.Handle("DELETE /v1/users/{id}", wrap(http.HandlerFunc(h.DeleteUser)))
+}
+
+func (h *Handler) requireKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("X-API-Key")
+		if key == "" {
+			key = r.URL.Query().Get("api_key")
+		}
+		if key == "" {
+			writeError(w, http.StatusUnauthorized, "X-API-Key header is required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	// Single-user mode: pendaftaran publik terkunci. User baru hanya bisa
+	// dibuat via CLI adduser. Darurat: set ALLOW_PUBLIC_REGISTER=true + restart.
+	if os.Getenv("ALLOW_PUBLIC_REGISTER") != "true" {
+		writeError(w, http.StatusForbidden, "registration is disabled (single-user mode)")
+		return
+	}
+
 	var req CreateUserRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

@@ -9,8 +9,6 @@ import React, {
 } from "react";
 import {
   ArrowUp,
-  FlaskConical,
-  Eraser,
   Square,
   CircleAlert,
   Brain,
@@ -20,11 +18,19 @@ import {
   X,
   MessageSquare,
   PanelLeft,
+  Bot,
+  Search,
+  Wrench,
+  Check,
+  Paperclip,
+  Mic,
+  Share2,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import AnimatedDropdown from "@/components/ui/animated-dropdown";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+// (Identik dengan chat lama — tidak ada perubahan protokol/backend.)
 
 interface ChatMsg {
   role: "user" | "assistant";
@@ -45,6 +51,48 @@ interface ChatModel {
   gangguan?: boolean;
 }
 
+type ChatMode = "llm" | "agent";
+
+interface ToolInfo {
+  name: string;
+  description: string;
+  needs_approval: boolean;
+}
+
+interface TraceEvent {
+  kind: string;
+  n?: number;
+  of?: number;
+  name?: string;
+  call_id?: string;
+  arguments?: string;
+  result?: string;
+  ms?: number;
+  command?: string;
+  approved?: boolean;
+  text?: string;
+  iterations?: number;
+  tools_used?: number;
+  truncated?: boolean;
+  timeout_sec?: number;
+}
+
+interface ApprovalReq {
+  call_id: string;
+  name: string;
+  command: string;
+}
+
+const ALL_TOOLS_FALLBACK = [
+  "list_files",
+  "read_file",
+  "server_stats",
+  "clock",
+  "run_shell",
+];
+
+const RESEARCH_STORAGE_KEY = "lab-chat-research";
+
 interface Conversation {
   uuid: string;
   title: string;
@@ -54,8 +102,8 @@ interface Conversation {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+// (Disalin 1:1 dari chat lama.)
 
-// Parser SSE minimal: feed chunk teks, keluarin payload per event "data:".
 function createSSEParser(onPayload: (payload: string) => void) {
   let buffer = "";
   return {
@@ -74,7 +122,6 @@ function createSSEParser(onPayload: (payload: string) => void) {
   };
 }
 
-// Format context window: 131056 -> "131k", 1048560 -> "1M".
 function fmtCtx(n?: number): string {
   if (!n || n <= 0) return "";
   if (n >= 1_000_000) {
@@ -101,6 +148,18 @@ function formatWhen(iso: string): string {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 }
 
+function dayGroup(iso: string): "today" | "yesterday" | "older" {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "older";
+  const now = new Date();
+  const startOf = (x: Date) =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86_400_000);
+  if (diffDays <= 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  return "older";
+}
+
 // ─── Inline markdown mini (bold, italic, inline code) ───────────────────────
 
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
@@ -116,7 +175,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
       nodes.push(
         <code
           key={`${keyPrefix}-c${i++}`}
-          className="rounded bg-line px-1.5 py-0.5 font-mono text-[0.85em] text-ink"
+          className="rounded bg-[#18181B]/5 px-1.5 py-0.5 font-mono text-[0.85em] text-[#18181B]"
         >
           {tok.slice(1, -1)}
         </code>
@@ -137,7 +196,6 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
 }
 
 function AssistantContent({ content }: { content: string }) {
-  // Split per code block ``` ... ``` sisanya paragraf.
   const parts = useMemo(() => content.split(/```/), [content]);
   return (
     <div className="space-y-3">
@@ -149,29 +207,115 @@ function AssistantContent({ content }: { content: string }) {
           return (
             <div
               key={pi}
-              className="overflow-hidden rounded-xl border border-line"
+              className="overflow-hidden rounded-lg border border-[#E7E5E4]"
             >
-              <div className="flex items-center justify-between border-b border-line bg-accent px-3 py-1.5 font-mono text-[11px] text-muted">
+              <div className="flex items-center justify-between border-b border-[#E7E5E4] bg-[#FAFAF9] px-3 py-1.5 font-mono text-[11px] text-[#71717A]">
                 <span>{lang || "code"}</span>
-                <span className="text-gold-ink">lab</span>
+                <span className="rounded bg-[#18181B] px-1.5 py-0.5 text-[10px] text-white">
+                  nova
+                </span>
               </div>
-              <pre className="overflow-x-auto bg-paper p-3 font-mono text-[13px] leading-relaxed text-ink">
+              <pre className="overflow-x-auto bg-[#18181B] p-3 font-mono text-[13px] leading-relaxed text-[#FAFAF9]">
                 <code>{code.replace(/\n$/, "")}</code>
               </pre>
             </div>
           );
         }
+        // Kelompokkan baris quote `>` jadi bubble Quote ala mock.
+        const lines = part.split("\n");
+        const blocks: { quote: boolean; text: string }[] = [];
+        let buf: string[] = [];
+        let inQuote = false;
+        const flush = () => {
+          if (buf.length > 0) {
+            blocks.push({ quote: inQuote, text: buf.join("\n") });
+            buf = [];
+          }
+        };
+        for (const ln of lines) {
+          const isQ = /^\s*>\s?/.test(ln);
+          if (blocks.length === 0 && buf.length === 0) inQuote = isQ;
+          if (isQ !== inQuote) {
+            flush();
+            inQuote = isQ;
+          }
+          buf.push(isQ ? ln.replace(/^\s*>\s?/, "") : ln);
+        }
+        flush();
         return (
-          <p key={pi} className="whitespace-pre-wrap leading-relaxed">
-            {renderInline(part, `p${pi}`)}
-          </p>
+          <div key={pi} className="space-y-3">
+            {blocks.map((b, bi) =>
+              b.text.trim() === "" ? null : b.quote ? (
+                <div
+                  key={bi}
+                  className="rounded-lg border-l-[3px] border-[#D6D3D1] bg-[#FAFAF9] p-[10px]"
+                >
+                  <p className="text-[12px] leading-relaxed whitespace-pre-wrap text-[#44403C]">
+                    {renderInline(b.text, `p${pi}q${bi}`)}
+                  </p>
+                </div>
+              ) : (
+                <p
+                  key={bi}
+                  className="text-[13px] leading-relaxed whitespace-pre-wrap"
+                >
+                  {renderInline(b.text, `p${pi}t${bi}`)}
+                </p>
+              )
+            )}
+          </div>
         );
       })}
     </div>
   );
 }
 
-// ─── Thinking block (collapsible, smooth height) ────────────────────────────
+// ─── Follow-up questions ────────────────────────────────────────────────────
+
+const FOLLOWUP_HEADER = "### Pertanyaan lanjutan";
+
+function parseFollowUps(content: string): string[] {
+  const idx = content.indexOf(FOLLOWUP_HEADER);
+  if (idx === -1) return [];
+  const tail = content.slice(idx + FOLLOWUP_HEADER.length);
+  const out: string[] = [];
+  for (const line of tail.split("\n")) {
+    const m = line.match(/^\s*(?:\d+[.)]|[-*])\s+(.+?)\s*$/);
+    if (m && m[1].length > 3 && out.length < 3) out.push(m[1]);
+  }
+  return out;
+}
+
+function FollowUpButtons({
+  questions,
+  onPick,
+}: {
+  questions: string[];
+  onPick: (q: string) => void;
+}) {
+  if (questions.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-[#E7E5E4] pt-2.5">
+      <div className="mb-1.5 font-mono text-[11px] text-[#A1A1AA]">
+        pertanyaan lanjutan —
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {questions.map((q) => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => onPick(q)}
+            className="rounded-lg border border-[#E7E5E4] px-3 py-1.5 text-left text-[13px] leading-snug text-[#71717A] transition hover:border-[#18181B] hover:text-[#18181B] active:scale-[0.99]"
+          >
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Thinking block (collapsible) ───────────────────────────────────────────
 
 function ThinkingBlock({
   reasoning,
@@ -180,7 +324,6 @@ function ThinkingBlock({
   reasoning: string;
   active: boolean;
 }) {
-  // active = reasoning masih mengalir utk pesan ini.
   const [userToggle, setUserToggle] = useState<boolean | null>(null);
   const autoOpen = active && reasoning.length > 0;
   const open = userToggle !== null ? userToggle : autoOpen;
@@ -198,21 +341,19 @@ function ThinkingBlock({
     : `berpikir selesai · ${reasoning.length} char`;
 
   return (
-    <div className="lab-anim-in mb-3 overflow-hidden rounded-xl border border-line bg-accent/60">
+    <div className="mb-3 overflow-hidden rounded-lg border border-[#E7E5E4] bg-[#FAFAF9]">
       <button
         type="button"
         onClick={() => setUserToggle(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-muted transition-colors hover:text-ink"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-[#71717A] transition-colors hover:text-[#18181B]"
       >
         <Brain
           className={cn(
             "h-3.5 w-3.5 shrink-0",
-            active ? "text-gold-ink" : "text-faint"
+            active ? "text-[#18181B]" : "text-[#A1A1AA]"
           )}
         />
-        <span className={cn("min-w-0 flex-1 truncate", active && "lab-shimmer-text")}>
-          {label}
-        </span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronDown
           className={cn(
             "h-3.5 w-3.5 shrink-0 transition-transform duration-300",
@@ -229,11 +370,11 @@ function ThinkingBlock({
       >
         <div
           ref={bodyRef}
-          className="max-h-64 overflow-y-auto border-t border-line px-3 py-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted"
+          className="max-h-64 overflow-y-auto border-t border-[#E7E5E4] px-3 py-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-[#71717A]"
         >
           {reasoning}
           {active && (
-            <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-gold align-text-bottom" />
+            <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-[#18181B] align-text-bottom" />
           )}
         </div>
       </div>
@@ -241,7 +382,7 @@ function ThinkingBlock({
   );
 }
 
-// ─── History sidebar ────────────────────────────────────────────────────────
+// ─── History sidebar (Nova) ─────────────────────────────────────────────────
 
 function HistorySidebar({
   conversations,
@@ -260,91 +401,377 @@ function HistorySidebar({
   onDelete: (uuid: string) => void;
   onClose?: () => void;
 }) {
-  return (
-    <div className="flex h-full w-full flex-col bg-card backdrop-blur-xl">
-      {/* Head: judul + tombol chat baru */}
-      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-faint">
-          Riwayat
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onNew}
-            title="Chat baru"
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-2.5 text-xs font-medium text-gold-ink transition hover:bg-gold/20 active:scale-95"
+  const groups = useMemo(() => {
+    const today: Conversation[] = [];
+    const yesterday: Conversation[] = [];
+    const older: Conversation[] = [];
+    for (const c of conversations) {
+      const g = dayGroup(c.updated_at);
+      if (g === "today") today.push(c);
+      else if (g === "yesterday") yesterday.push(c);
+      else older.push(c);
+    }
+    return [
+      { label: "HARI INI", items: today },
+      { label: "KEMARIN", items: yesterday },
+      { label: "SEBELUMNYA", items: older },
+    ].filter((g) => g.items.length > 0);
+  }, [conversations]);
+
+  const renderItem = (c: Conversation) => {
+    const isActive = c.uuid === activeConv;
+    return (
+      <li key={c.uuid} className="group relative">
+        <button
+          onClick={() => onSelect(c.uuid)}
+          title={c.title}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg px-[10px] py-2 text-left transition-colors",
+            isActive
+              ? "bg-white text-[#18181B] outline-1 outline-[#E7E5E4]"
+              : "text-[#71717A] hover:bg-[#F5F4F3] hover:text-[#18181B]"
+          )}
+        >
+          {isActive && (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#18181B]" />
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] leading-snug">
+              {c.title}
+            </span>
+            <span className="block font-mono text-[10px] text-[#A1A1AA]">
+              {c.message_count} pesan · {formatWhen(c.updated_at)}
+            </span>
+          </span>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(c.uuid);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                onDelete(c.uuid);
+              }
+            }}
+            title="Hapus percakapan"
+            className="hidden h-6 w-6 shrink-0 items-center justify-center rounded text-[#A1A1AA] transition hover:bg-[#E7E5E4] hover:text-[#18181B] group-hover:flex"
           >
-            <Plus className="h-3.5 w-3.5" />
-            Baru
-          </button>
+            <Trash2 className="h-3.5 w-3.5" />
+          </span>
+        </button>
+      </li>
+    );
+  };
+
+  return (
+    <div className="flex h-full w-full flex-col bg-[#FAFAF9]">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <span className="h-[10px] w-[10px] shrink-0 rounded-full bg-[#18181B]" />
+          <span className="text-[15px] font-semibold text-[#18181B]">Nova</span>
           {onClose && (
             <button
               onClick={onClose}
               title="Tutup"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-accent lg:hidden"
+              className="ml-auto flex h-7 w-7 items-center justify-center rounded text-[#71717A] transition hover:bg-[#E7E5E4] lg:hidden"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
+        <button
+          onClick={onNew}
+          className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#18181B] p-[10px] text-[13px] font-medium text-white transition hover:bg-[#18181B]/85 active:scale-[0.99]"
+        >
+          <Plus className="h-[15px] w-[15px]" />
+          New chat
+        </button>
       </div>
 
-      {/* Daftar percakapan */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="mt-3 flex-1 overflow-y-auto">
         {loading ? (
-          <div className="space-y-1 px-2 py-1">
+          <div className="space-y-1">
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="h-10 animate-pulse rounded-lg bg-accent"
+                className="h-10 animate-pulse rounded-lg bg-[#E7E5E4]/60"
               />
             ))}
           </div>
         ) : conversations.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs leading-relaxed text-faint">
+          <p className="px-1 py-6 text-center text-xs leading-relaxed text-[#A1A1AA]">
             Belum ada percakapan.
             <br />
             Mulai chat baru — riwayatnya
             <br />
-            tersimpan di database lab.
+            tersimpan di database.
           </p>
         ) : (
-          <ul className="space-y-0.5">
-            {conversations.map((c) => {
-              const isActive = c.uuid === activeConv;
-              return (
-                <li key={c.uuid} className="group relative">
-                  <button
-                    onClick={() => onSelect(c.uuid)}
-                    className={cn(
-                      "flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 pr-9 text-left transition-colors",
-                      isActive
-                        ? "bg-gold/10 text-ink"
-                        : "text-muted hover:bg-accent"
-                    )}
-                  >
-                    <span className="truncate text-[13px] font-medium leading-snug">
-                      {c.title}
-                    </span>
-                    <span className="font-mono text-[10px] text-faint">
-                      {c.message_count} pesan · {formatWhen(c.updated_at)}
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(c.uuid);
-                    }}
-                    title="Hapus percakapan"
-                    className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-faint opacity-0 transition hover:bg-red-50 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="flex flex-col gap-1">
+            {groups.map((g) => (
+              <div key={g.label}>
+                <div className="px-[10px] pt-2 pb-1 font-mono text-[10px] tracking-wide text-[#A1A1AA]">
+                  {g.label}
+                </div>
+                <ul className="space-y-1">{g.items.map(renderItem)}</ul>
+              </div>
+            ))}
+          </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Agent trace row (Nova palette) ─────────────────────────────────────────
+
+function TraceRow({ ev }: { ev: TraceEvent }) {
+  const base =
+    "flex items-start gap-2 rounded-md px-2 py-1.5 font-mono text-[11px] leading-relaxed";
+  switch (ev.kind) {
+    case "iteration":
+      return (
+        <div className={cn(base, "bg-[#F5F4F3] text-[#71717A]")}>
+          <span className="shrink-0 font-bold text-[#18181B]">
+            #{ev.n}/{ev.of}
+          </span>
+          <span>iterasi agent</span>
+        </div>
+      );
+    case "tool_call":
+      return (
+        <div className={cn(base, "bg-[#18181B]/5 text-[#18181B]")}>
+          <Wrench className="mt-0.5 h-3 w-3 shrink-0" />
+          <span className="min-w-0 flex-1 break-words">
+            <span className="font-bold">{ev.name}</span>
+            {ev.arguments && ev.arguments !== "{}" && (
+              <span className="text-[#71717A]">
+                {" "}
+                {String(ev.arguments).slice(0, 200)}
+              </span>
+            )}
+          </span>
+        </div>
+      );
+    case "tool_result":
+      return (
+        <div className={cn(base, "bg-[#FAFAF9] text-[#18181B]")}>
+          <span className="shrink-0">→</span>
+          <span className="min-w-0 flex-1 break-words">
+            <span className="font-bold">{ev.name}</span>
+            {typeof ev.ms === "number" && (
+              <span className="text-[#A1A1AA]"> ({ev.ms}ms)</span>
+            )}
+            {ev.result && (
+              <span className="mt-0.5 block whitespace-pre-wrap break-words text-[#71717A]">
+                {String(ev.result).slice(0, 500)}
+              </span>
+            )}
+          </span>
+        </div>
+      );
+    case "approval_request":
+      return (
+        <div className={cn(base, "bg-amber-50 text-amber-900")}>
+          <span className="shrink-0 animate-pulse">⏳</span>
+          <span className="min-w-0 flex-1 break-words">
+            minta approval — <code className="break-all">{ev.command}</code>
+          </span>
+        </div>
+      );
+    case "approval_decision":
+      return (
+        <div
+          className={cn(
+            base,
+            ev.approved ? "text-emerald-700" : "text-red-600"
+          )}
+        >
+          <span>{ev.approved ? "✔ disetujui user" : "✘ ditolak user"}</span>
+        </div>
+      );
+    case "note":
+      return (
+        <div className={cn(base, "text-[#71717A]")}>
+          <span className="break-words">{ev.text}</span>
+        </div>
+      );
+    case "nudge":
+      return (
+        <div className={cn(base, "bg-[#F5F4F3] text-[#18181B]")}>
+          <span className="shrink-0 animate-pulse">⚡</span>
+          <span className="break-words">{ev.text}</span>
+        </div>
+      );
+    case "done":
+      return null;
+    default:
+      return (
+        <div className={cn(base, "text-[#A1A1AA]")}>
+          <span className="break-words">{JSON.stringify(ev).slice(0, 200)}</span>
+        </div>
+      );
+  }
+}
+
+function ResearchPhases({
+  trace,
+  done,
+}: {
+  trace: TraceEvent[];
+  done: boolean;
+}) {
+  const kinds = trace.map((t) => `${t.kind}:${t.name ?? ""}`);
+  const hasIter = kinds.some((k) => k.startsWith("iteration"));
+  const hasSearch = kinds.some((k) => k === "tool_call:web_search");
+  const hasSearchResult = trace.some(
+    (t) => t.kind === "tool_result" && t.name === "web_search"
+  );
+  const hasFetch = kinds.some((k) => k === "tool_call:fetch_url");
+  const hasAnswer = done;
+
+  const phases = [
+    { label: "Analyzing question", active: hasIter, done: hasSearch || hasAnswer },
+    {
+      label: "Searching the web",
+      active: hasSearch && !hasSearchResult,
+      done: hasSearchResult || hasFetch || hasAnswer,
+    },
+    { label: "Reviewing sources", active: hasFetch && !hasAnswer, done: hasAnswer },
+    { label: "Preparing answer", active: hasAnswer, done: hasAnswer },
+  ];
+  const started = hasIter || trace.length > 0;
+
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-[#E7E5E4] px-3 py-2">
+      {phases.map((p) => (
+        <span
+          key={p.label}
+          className={cn(
+            "flex items-center gap-1.5 font-mono text-[11px]",
+            p.done
+              ? "text-emerald-700"
+              : p.active ||
+                  (started && !hasAnswer && p.label === "Analyzing question")
+                ? "text-[#18181B]"
+                : "text-[#A1A1AA]"
+          )}
+        >
+          {p.done ? (
+            <Check className="h-3 w-3" />
+          ) : p.active ? (
+            <span className="h-2 w-2 animate-pulse rounded-full bg-[#18181B]" />
+          ) : (
+            <span className="h-2 w-2 rounded-full bg-[#E7E5E4]" />
+          )}
+          {p.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ─── Nova model dropdown (ganti AnimatedDropdown yang bertema gelap) ────────
+
+function ModelMenu({
+  models,
+  activeModelId,
+  modelLabel,
+  providerLabel,
+  onPick,
+}: {
+  models: ChatModel[];
+  activeModelId?: string;
+  modelLabel: string;
+  providerLabel: string;
+  onPick: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open ]);
+
+  return (
+    <div ref={wrapRef} className="relative hidden sm:block">
+      <button
+        type="button"
+        onClick={() => models.length > 0 && setOpen((v) => !v)}
+        title={
+          models.length > 0 ? "Pilih model" : "Model aktif dari server"
+        }
+        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[14px] font-medium text-[#18181B] transition hover:bg-[#F5F4F3]"
+      >
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#18181B] opacity-30" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#18181B]" />
+        </span>
+        <span className="max-w-[160px] truncate">{modelLabel}</span>
+        <span className="hidden font-mono text-[11px] font-normal text-[#A1A1AA] xl:inline">
+          · {providerLabel}
+        </span>
+        {models.length > 0 && (
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 text-[#A1A1AA] transition-transform",
+              open && "rotate-180"
+            )}
+          />
+        )}
+      </button>
+      {open && models.length > 0 && (
+        <div className="absolute top-[calc(100%+8px)] right-0 z-50 max-h-72 w-72 overflow-y-auto rounded-xl border border-[#E7E5E4] bg-white p-1.5 shadow-xl">
+          {models.map((m) => {
+            const desc = [m.owned_by, fmtCtx(m.context_window) ? `${fmtCtx(m.context_window)} ctx` : ""]
+              .filter(Boolean)
+              .join(" · ");
+            const active = activeModelId === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  onPick(m.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-[#F5F4F3]",
+                  active ? "text-[#18181B]" : "text-[#71717A]"
+                )}
+              >
+                {m.gangguan && (
+                  <span
+                    title="Model sedang gangguan"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"
+                  />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium">
+                    {m.id}
+                  </span>
+                  {desc && (
+                    <span className="block truncate text-[11px] text-[#A1A1AA]">
+                      {desc}
+                    </span>
+                  )}
+                </span>
+                {active && <Check className="h-3.5 w-3.5 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -361,6 +788,8 @@ const SUGGESTIONS = [
 const LEGACY_STORAGE_KEY = "lab-chat-v1";
 const MODEL_STORAGE_KEY = "lab-chat-model";
 
+type NovaSeg = "chat" | "agent" | "search";
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
@@ -373,9 +802,34 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [convLoading, setConvLoading] = useState(true);
   const [activeConv, setActiveConv] = useState<string | null>(null);
-  // Ref sinkron buat guard race: stream jalan terus walau user pindah conv.
   const activeConvRef = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const [mode, setMode] = useState<ChatMode>("llm");
+  const [toolCatalog, setToolCatalog] = useState<ToolInfo[]>([]);
+  const [enabledTools, setEnabledTools] = useState<string[]>(ALL_TOOLS_FALLBACK);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [trace, setTrace] = useState<TraceEvent[]>([]);
+  const [turnSummary, setTurnSummary] = useState<string | null>(null);
+  const [approval, setApproval] = useState<ApprovalReq | null>(null);
+  const turnStartRef = useRef(0);
+  const [research, setResearch] = useState(() => {
+    try {
+      return window.localStorage.getItem(RESEARCH_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setResearchStored = useCallback((v: boolean) => {
+    setResearch(v);
+    try {
+      window.localStorage.setItem(RESEARCH_STORAGE_KEY, v ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -400,7 +854,6 @@ export default function ChatPage() {
     }
   }, []);
 
-  // ── Mount: muat daftar percakapan + migrasi localStorage lama → DB ──
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -409,8 +862,6 @@ export default function ChatPage() {
       setConvLoading(false);
       if (list === null) return;
 
-      // Migrasi sekali: riwayat lama di localStorage dipindah ke database
-      // sebagai satu percakapan, lalu localStorage dibuang.
       if (list.length === 0) {
         let legacy: ChatMsg[] = [];
         try {
@@ -488,7 +939,6 @@ export default function ChatPage() {
           if (cancelled) return;
           const list = d.models ?? [];
           setModels(list);
-          // Restore pilihan model terakhir — valid dulu ada di daftar.
           try {
             const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
             if (saved && list.some((m) => m.id === saved)) {
@@ -501,27 +951,41 @@ export default function ChatPage() {
         .catch(() => {
           /* daftar model gagal — badge tetap tampil tanpa dropdown */
         });
+
+      fetch("/api/agent/tools")
+        .then((r) => (r.ok ? r.json() : { tools: [] }))
+        .then((d: { tools?: ToolInfo[] }) => {
+          if (cancelled) return;
+          if (d.tools && d.tools.length > 0) {
+            setToolCatalog(d.tools);
+            setEnabledTools(d.tools.map((t) => t.name));
+          }
+        })
+        .catch(() => {
+          /* fallback ALL_TOOLS_FALLBACK sudah terisi */
+        });
     })();
     return () => {
       cancelled = true;
     };
   }, [refreshConversations]);
 
-  // Escape nutup drawer riwayat (mobile).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSidebarOpen(false);
+      if (e.key === "Escape") {
+        setSidebarOpen(false);
+        setMoreOpen(false);
+        setToolsOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Auto-scroll ke bawah.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, error]);
 
-  // Sinkronkan ref activeConv (dipakai guard di dalam stream send()).
   useEffect(() => {
     activeConvRef.current = activeConv;
   }, [activeConv]);
@@ -538,7 +1002,6 @@ export default function ChatPage() {
     abortRef.current = null;
   }, []);
 
-  // ── Pilih percakapan: muat pesan dari database ──
   const selectConversation = useCallback(
     async (uuid: string) => {
       if (uuid === activeConv) {
@@ -580,7 +1043,6 @@ export default function ChatPage() {
     [activeConv, stop]
   );
 
-  // ── Chat baru: kosongkan thread (percakapan dibuat saat kirim pesan pertama) ──
   const newChat = useCallback(() => {
     stop();
     setSidebarOpen(false);
@@ -591,7 +1053,6 @@ export default function ChatPage() {
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [stop]);
 
-  // ── Hapus percakapan dari database ──
   const deleteConversation = useCallback(
     async (uuid: string) => {
       if (!window.confirm("Hapus percakapan ini beserta semua pesannya?"))
@@ -627,8 +1088,6 @@ export default function ChatPage() {
       setInput("");
       requestAnimationFrame(autoResize);
 
-      // Pastikan ada percakapan di DB — buat otomatis pakai judul dari
-      // pesan pertama.
       let convId = activeConv;
       if (!convId) {
         try {
@@ -645,8 +1104,6 @@ export default function ChatPage() {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = (await res.json()) as { conversation: Conversation };
           convId = data.conversation.uuid;
-          // User pindah conv pas create in-flight? Batal + hapus conv kosong
-          // biar gak jadi sampah, jangan sentuh UI conv yang baru dipilih.
           if (activeConvRef.current !== null && activeConvRef.current !== convId) {
             fetch(`/api/chat/conversations/${convId}`, { method: "DELETE" }).catch(
               () => undefined
@@ -669,8 +1126,6 @@ export default function ChatPage() {
         { role: "assistant" as const, content: "", reasoning: "" },
       ]);
 
-      // Simpan pesan user ke DB dulu (await — jaga urutan created_at),
-      // lalu mulai streaming. Gagal simpan gak blokir chat.
       try {
         const saveRes = await fetch(
           `/api/chat/conversations/${currentConvId}/messages`,
@@ -688,7 +1143,6 @@ export default function ChatPage() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Akumulasi jawaban buat disimpan ke DB setelah stream selesai.
       let accContent = "";
       let accReasoning = "";
 
@@ -730,9 +1184,6 @@ export default function ChatPage() {
               error?: string | { message?: string };
             };
             if (chunk.error) {
-              // Error upstream bisa string ATAU objek {type, message} —
-              // jangan pernah setLangsung nilai objek ke state string,
-              // bikin crash render ("Objects are not valid as a React child").
               const errMsg =
                 typeof chunk.error === "string"
                   ? chunk.error
@@ -743,13 +1194,11 @@ export default function ChatPage() {
             }
             const delta = chunk.choices?.[0]?.delta;
             if (!delta) return;
-            // Beda provider beda nama field reasoning — terima dua-duanya.
             const rDelta = delta.reasoning ?? delta.reasoning_content ?? "";
             if (delta.content || rDelta) {
               accContent += delta.content ?? "";
               accReasoning += rDelta;
               setMessages((prev) => {
-                // User pindah conv mid-stream? Jangan sentuh UI conv baru.
                 if (activeConvRef.current !== currentConvId) return prev;
                 if (prev.length === 0) return prev;
                 const next = [...prev];
@@ -783,8 +1232,6 @@ export default function ChatPage() {
       } finally {
         abortRef.current = null;
         setStreaming(false);
-        // Buang assistant bubble kosong kalau gak dapet apa-apa.
-        // Guard: hanya kalau user masih di conv yang sama.
         setMessages((prev) => {
           if (activeConvRef.current !== currentConvId) return prev;
           return prev.length > 0 &&
@@ -793,7 +1240,6 @@ export default function ChatPage() {
             ? prev.slice(0, -1)
             : prev;
         });
-        // Simpan jawaban assistant ke DB (partial pun disimpan).
         if (accContent.trim() !== "" || accReasoning.trim() !== "") {
           fetch(`/api/chat/conversations/${currentConvId}/messages`, {
             method: "POST",
@@ -824,7 +1270,227 @@ export default function ChatPage() {
     [messages, streaming, activeConv, selectedModel, autoResize, refreshConversations]
   );
 
-  // Eraser: hapus percakapan aktif dari database.
+  const answerApproval = useCallback(async (callId: string, approve: boolean) => {
+    setApproval((cur) => (cur?.call_id === callId ? null : cur));
+    try {
+      await fetch(`/api/agent/approvals/${encodeURIComponent(callId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approve }),
+      });
+    } catch {
+      setError("Gagal mengirim keputusan approval.");
+    }
+  }, []);
+
+  const sendAgent = useCallback(
+    async (text: string) => {
+      const content = text.trim();
+      if (!content || streaming) return;
+
+      setError(null);
+      setStreaming(true);
+      setInput("");
+      requestAnimationFrame(autoResize);
+      setTrace([]);
+      setTurnSummary(null);
+      setApproval(null);
+      turnStartRef.current = Date.now();
+
+      let convId = activeConv;
+      if (!convId) {
+        try {
+          const res = await fetch("/api/chat/conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: content.slice(0, 80) }),
+          });
+          if (res.status === 401) {
+            setError("Sesi habis — refresh halaman buat login ulang.");
+            setStreaming(false);
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as { conversation: Conversation };
+          convId = data.conversation.uuid;
+          if (activeConvRef.current !== null && activeConvRef.current !== convId) {
+            fetch(`/api/chat/conversations/${convId}`, { method: "DELETE" }).catch(
+              () => undefined
+            );
+            setStreaming(false);
+            return;
+          }
+          setActiveConv(convId);
+        } catch {
+          setError("Gagal membuat percakapan baru.");
+          setStreaming(false);
+          return;
+        }
+      }
+      const currentConvId = convId;
+
+      const history = [...messages, { role: "user" as const, content }];
+      setMessages([
+        ...history,
+        { role: "assistant" as const, content: "", reasoning: "" },
+      ]);
+
+      try {
+        const saveRes = await fetch(
+          `/api/chat/conversations/${currentConvId}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: [{ role: "user", content }] }),
+          }
+        );
+        if (!saveRes.ok) setError("Pesan user gagal tersimpan ke database.");
+      } catch {
+        setError("Pesan user gagal tersimpan ke database.");
+      }
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let accContent = "";
+
+      const appendAssistant = (delta: string) => {
+        accContent += delta;
+        setMessages((prev) => {
+          if (activeConvRef.current !== currentConvId) return prev;
+          if (prev.length === 0) return prev;
+          const next = [...prev];
+          const last = next[next.length - 1];
+          next[next.length - 1] = { ...last, role: "assistant", content: last.content + delta };
+          return next;
+        });
+      };
+
+      const pushTrace = (ev: TraceEvent) => {
+        setTrace((prev) => {
+          if (activeConvRef.current !== currentConvId) return prev;
+          return [...prev.slice(-49), ev];
+        });
+        if (ev.kind === "approval_request" && ev.call_id) {
+          setApproval({
+            call_id: String(ev.call_id),
+            name: String(ev.name ?? "run_shell"),
+            command: String(ev.command ?? ""),
+          });
+        }
+        if (ev.kind === "approval_decision") setApproval(null);
+        if (ev.kind === "done") {
+          const secs = ((Date.now() - turnStartRef.current) / 1000).toFixed(1);
+          setTurnSummary(
+            `${ev.iterations ?? "?"} iterasi · ${ev.tools_used ?? 0} tool · ${secs}s${
+              ev.truncated ? " · mentok batas" : ""
+            }`
+          );
+        }
+      };
+
+      try {
+        const res = await fetch("/api/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: history.map((m) => ({ role: m.role, content: m.content })),
+            model: selectedModel ?? undefined,
+            tools: enabledTools,
+            max_iterations: research ? 8 : 5,
+            temperature: research ? 0.3 : undefined,
+            research,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          let msg = `HTTP ${res.status}`;
+          try {
+            const j = (await res.json()) as { error?: string };
+            if (j.error) msg = j.error;
+          } catch {
+            /* body bukan json */
+          }
+          throw new Error(msg);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const parser = createSSEParser((payload) => {
+          if (payload === "[DONE]") return;
+          try {
+            const ev = JSON.parse(payload) as
+              | { type: "token"; delta?: string }
+              | { type: "trace"; kind?: string; [k: string]: unknown }
+              | { type: "error"; error?: string };
+            if (ev.type === "token") {
+              if (ev.delta) appendAssistant(ev.delta);
+              return;
+            }
+            if (ev.type === "trace") {
+              pushTrace(ev as TraceEvent);
+              return;
+            }
+            if (ev.type === "error") {
+              setError(ev.error ?? "Agent gagal");
+              return;
+            }
+          } catch {
+            // payload bukan envelope agent — skip.
+          }
+        });
+
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parser.push(decoder.decode(value, { stream: true }));
+        }
+      } catch (err: unknown) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setError(msg || "Agent gagal");
+        }
+      } finally {
+        abortRef.current = null;
+        setStreaming(false);
+        setApproval(null);
+        setMessages((prev) => {
+          if (activeConvRef.current !== currentConvId) return prev;
+          return prev.length > 0 && prev[prev.length - 1].content === ""
+            ? prev.slice(0, -1)
+            : prev;
+        });
+        if (accContent.trim() !== "") {
+          fetch(`/api/chat/conversations/${currentConvId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [{ role: "assistant", content: accContent }],
+            }),
+          })
+            .then((r) => {
+              if (!r.ok) throw new Error("save failed");
+            })
+            .catch(() => setError("Jawaban gagal tersimpan ke database."))
+            .finally(() => {
+              refreshConversations();
+            });
+        } else {
+          refreshConversations();
+        }
+      }
+    },
+    [messages, streaming, activeConv, selectedModel, autoResize, refreshConversations, enabledTools, research]
+  );
+
+  const submit = useCallback(
+    (text: string) => {
+      if (research || mode === "agent") sendAgent(text);
+      else send(text);
+    },
+    [research, mode, sendAgent, send]
+  );
+
   const deleteActive = useCallback(() => {
     if (!activeConv || messages.length === 0) return;
     deleteConversation(activeConv);
@@ -833,13 +1499,26 @@ export default function ChatPage() {
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send(input);
+      submit(input);
     }
   };
 
-  const modelLabel = selectedModel ?? meta?.model ?? "…";
+  const copyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("Gagal menyalin tautan.");
+    }
+    setMoreOpen(false);
+  }, []);
+
+  // ── Nova header state ──
+  const modelLabel = selectedModel ?? meta?.model ?? "Nova 2.5";
   const providerLabel = meta?.provider ?? "tokenportal";
   const activeModelId = selectedModel ?? meta?.model;
+  const activeSeg: NovaSeg = research ? "search" : mode === "agent" ? "agent" : "chat";
 
   const pickModel = (id: string) => {
     setSelectedModel(id);
@@ -850,242 +1529,394 @@ export default function ChatPage() {
     }
   };
 
+  const pickSeg = (seg: NovaSeg) => {
+    if (seg === "search") {
+      setResearchStored(true);
+    } else {
+      setResearchStored(false);
+      setMode(seg === "agent" ? "agent" : "llm");
+    }
+  };
+
+  const segBtn = (seg: NovaSeg, Icon: typeof MessageSquare, label: string) => {
+    const on = activeSeg === seg;
+    return (
+      <button
+        key={seg}
+        type="button"
+        onClick={() => pickSeg(seg)}
+        title={seg === "chat" ? "Chat langsung" : seg === "agent" ? "Agent + tools" : "Riset web mendalam"}
+        className={cn(
+          "flex items-center gap-1.5 rounded-[7px] px-[10px] py-[6px] text-[12px] font-medium transition",
+          on ? "bg-[#18181B] text-white" : "text-[#71717A] hover:text-[#18181B]"
+        )}
+      >
+        <Icon className="h-[13px] w-[13px]" />
+        {label}
+      </button>
+    );
+  };
+
+  const sidebarProps = {
+    conversations,
+    activeConv,
+    loading: convLoading,
+    onSelect: selectConversation,
+    onNew: newChat,
+    onDelete: deleteConversation,
+  };
+
   return (
-    <div className="relative flex h-full w-full overflow-hidden bg-paper">
-      {/* Dekor: dot grid halus + glow amber di pojok */}
+    <div className="relative flex h-full w-full overflow-hidden bg-white font-[Inter,system-ui,sans-serif] text-[#18181B]">
+      {/* Dekor stone halus (pengganti Dragon BG jpeg 1MB+ di mock) */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           backgroundImage:
-            "radial-gradient(circle, rgba(120,113,108,0.35) 1px, transparent 1px)",
+            "radial-gradient(circle, rgba(24,24,27,0.06) 1px, transparent 1px)",
           backgroundSize: "22px 22px",
         }}
       />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-24 right-0 h-64 w-64 rounded-full bg-gold/10 blur-3xl"
-      />
 
-      {/* ── Sidebar riwayat: desktop statis, mobile drawer ── */}
-      <aside className="relative z-10 hidden w-64 shrink-0 border-r border-line lg:block">
-        <HistorySidebar
-          conversations={conversations}
-          activeConv={activeConv}
-          loading={convLoading}
-          onSelect={selectConversation}
-          onNew={newChat}
-          onDelete={deleteConversation}
-        />
+      {/* ── Sidebar desktop ── */}
+      <aside className="relative z-10 hidden w-[248px] shrink-0 flex-col justify-between border-r border-[#E7E5E4] bg-[#FAFAF9] p-[20px_14px_16px_14px] lg:flex">
+        <HistorySidebar {...sidebarProps} />
+        <p className="mt-3 px-1 font-mono text-[10px] leading-relaxed text-[#A1A1AA]">
+          Riwayat tersimpan di database lab.
+        </p>
       </aside>
 
-      {/* Drawer riwayat (mobile/tablet) */}
+      {/* ── Drawer mobile ── */}
       <div
         aria-hidden={!sidebarOpen}
         onClick={() => setSidebarOpen(false)}
         className={cn(
-          "fixed inset-0 z-[55] bg-ink/40 backdrop-blur-sm transition-opacity duration-300 lg:hidden",
+          "fixed inset-0 z-[55] bg-black/30 transition-opacity duration-300 lg:hidden",
           sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-[60] flex w-72 max-w-[85vw] flex-col border-r border-line bg-card shadow-2xl transition-transform duration-300 ease-out lg:hidden",
+          "fixed inset-y-0 left-0 z-[60] flex w-72 max-w-[85vw] flex-col border-r border-[#E7E5E4] bg-[#FAFAF9] p-[20px_14px_16px_14px] shadow-2xl transition-transform duration-300 ease-out lg:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <HistorySidebar
-          conversations={conversations}
-          activeConv={activeConv}
-          loading={convLoading}
-          onSelect={selectConversation}
-          onNew={newChat}
-          onDelete={deleteConversation}
+          {...sidebarProps}
           onClose={() => setSidebarOpen(false)}
         />
       </aside>
 
-      {/* ── Kolom utama: header + thread + input ── */}
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+      {/* ── Kolom utama ── */}
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col bg-white">
         {/* Header */}
-        {/* Header — z-20 biar dropdown panel gak ketutup thread */}
-        <header className="relative z-20 flex items-center justify-between border-b border-line bg-card/85 py-3 pl-16 pr-4 backdrop-blur sm:px-6">
-          <div className="flex items-center gap-3">
+        <header className="flex items-center justify-between gap-2 border-b border-[#E7E5E4] bg-white px-4 py-[14px] sm:px-8">
+          {/* Kiri: hamburger (mobile) + share + more — sesuai urutan mock */}
+          <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
               title="Riwayat chat"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-card text-muted transition hover:text-ink lg:hidden"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition hover:bg-[#F5F4F3] hover:text-[#18181B] lg:hidden"
             >
               <PanelLeft className="h-4 w-4" />
             </button>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 text-gold-ink">
-              <FlaskConical className="h-4 w-4" />
+            <button
+              onClick={copyLink}
+              title={copied ? "Tautan disalin!" : "Salin tautan percakapan"}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition hover:bg-[#F5F4F3] hover:text-[#18181B]"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <Share2 className="h-4 w-4" />
+              )}
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setMoreOpen((v) => !v)}
+                title="Opsi lainnya"
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg transition",
+                  moreOpen
+                    ? "bg-[#F5F4F3] text-[#18181B]"
+                    : "text-[#A1A1AA] hover:bg-[#F5F4F3] hover:text-[#18181B]"
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {moreOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setMoreOpen(false)}
+                  />
+                  <div className="absolute left-0 z-40 mt-2 w-52 rounded-xl border border-[#E7E5E4] bg-white p-1.5 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMoreOpen(false);
+                        newChat();
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-[#18181B] transition hover:bg-[#F5F4F3]"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-[#A1A1AA]" />
+                      Chat baru
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copyLink}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-[#18181B] transition hover:bg-[#F5F4F3]"
+                    >
+                      <Share2 className="h-3.5 w-3.5 text-[#A1A1AA]" />
+                      Salin tautan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMoreOpen(false);
+                        deleteActive();
+                      }}
+                      disabled={!activeConv || messages.length === 0}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Hapus percakapan ini
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <div>
-              <h1 className="text-sm font-semibold text-ink">
-                Chat
-              </h1>
-              <p className="font-mono text-[11px] text-muted">
-                completion playground
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {models.length > 0 ? (
-              <AnimatedDropdown
-                className="hidden sm:block"
-                triggerClassName="h-8 gap-2 rounded-full border-line bg-card px-3 py-1.5 font-mono text-[11px] text-muted hover:bg-card hover:text-ink [&_svg]:h-3.5 [&_svg]:w-3.5"
-                text={
-                  <span className="flex items-center gap-2">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                    </span>
-                    <span className="text-ink">
-                      {modelLabel}
-                    </span>
-                    <span className="text-faint">·</span>
-                    <span>{providerLabel}</span>
-                  </span>
-                }
-                items={models.map((m) => ({
-                  name: m.id,
-                  description: [
-                    m.owned_by,
-                    fmtCtx(m.context_window)
-                      ? `${fmtCtx(m.context_window)} ctx`
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · "),
-                  danger: m.gangguan,
-                  active: activeModelId === m.id,
-                }))}
-                onSelect={(item) => pickModel(item.name)}
-              />
-            ) : (
-              <div className="hidden items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 font-mono text-[11px] text-muted sm:flex">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                <span className="text-ink">
-                  {modelLabel}
-                </span>
-                <span className="text-faint">·</span>
-                <span>{providerLabel}</span>
+            {(mode === "agent" || research) && (
+              <div className="relative hidden sm:block">
+                <button
+                  type="button"
+                  onClick={() => setToolsOpen((v) => !v)}
+                  title="Pilih tools agent"
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] transition",
+                    toolsOpen
+                      ? "border-[#18181B] bg-[#18181B] text-white"
+                      : "border-[#E7E5E4] text-[#71717A] hover:text-[#18181B]"
+                  )}
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  {enabledTools.length}/
+                  {toolCatalog.length || ALL_TOOLS_FALLBACK.length}
+                </button>
+                {toolsOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setToolsOpen(false)}
+                    />
+                    <div className="absolute left-0 z-40 mt-2 w-64 rounded-xl border border-[#E7E5E4] bg-white p-2 shadow-xl">
+                      <p className="px-2 pt-1 pb-1.5 font-mono text-[10px] tracking-wide text-[#A1A1AA] uppercase">
+                        Tools agent
+                      </p>
+                      {(toolCatalog.length > 0
+                        ? toolCatalog
+                        : ALL_TOOLS_FALLBACK.map((n) => ({
+                            name: n,
+                            description: "",
+                            needs_approval: n === "run_shell",
+                          }))
+                      ).map((t) => {
+                        const on = enabledTools.includes(t.name);
+                        return (
+                          <button
+                            key={t.name}
+                            type="button"
+                            onClick={() =>
+                              setEnabledTools((prev) =>
+                                prev.includes(t.name)
+                                  ? prev.filter((x) => x !== t.name)
+                                  : [...prev, t.name]
+                              )
+                            }
+                            title={t.description}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-[#F5F4F3]"
+                          >
+                            <span
+                              className={cn(
+                                "flex h-4 w-4 items-center justify-center rounded border text-[10px]",
+                                on
+                                  ? "border-[#18181B] bg-[#18181B] text-white"
+                                  : "border-[#E7E5E4] text-transparent"
+                              )}
+                            >
+                              ✓
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-xs text-[#18181B]">
+                              {t.name}
+                            </span>
+                            {t.needs_approval && (
+                              <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[9px] text-amber-800">
+                                approval
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
-            <button
-              onClick={newChat}
-              title="Chat baru"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-muted transition hover:border-gold/60 hover:text-gold-ink"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <button
-              onClick={deleteActive}
-              disabled={!activeConv || messages.length === 0}
-              title="Hapus percakapan ini"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-muted transition hover:border-red-300 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Eraser className="h-4 w-4" />
-            </button>
+          </div>
+
+          {/* Kanan: model + segmen — sesuai urutan mock */}
+          <div className="flex min-w-0 items-center gap-3">
+            <ModelMenu
+              models={models}
+              activeModelId={activeModelId}
+              modelLabel={modelLabel}
+              providerLabel={providerLabel}
+              onPick={pickModel}
+            />
+            <div className="flex items-center gap-1 rounded-[10px] border border-[#E7E5E4] bg-[#F5F4F3] p-1">
+              {segBtn("chat", MessageSquare, "Chat")}
+              {segBtn("agent", Bot, "Agent")}
+              {segBtn("search", Search, "Search")}
+            </div>
           </div>
         </header>
 
-        {/* Thread */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
-            {messages.length === 0 && (
-              <div className="lab-anim-in flex flex-1 flex-col items-center justify-center gap-6 py-16 text-center">
-                <div className="font-mono text-5xl text-gold-ink/70">
-                  {"{ }"}
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-ink">
-                    Lab Chat siap dicoba
-                  </h2>
-                  <p className="mt-1 max-w-sm text-sm text-muted">
-                    Streaming langsung dari TokenPortal. Riwayat percakapan
-                    tersimpan di database lab — lanjut kapan aja.
-                  </p>
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {SUGGESTIONS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => send(s)}
-                      className="rounded-full border border-line bg-card px-3.5 py-1.5 text-xs text-muted transition hover:border-gold/60 hover:text-gold-ink active:scale-95"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
+          <div className="mx-auto flex w-full max-w-[960px] flex-col items-center px-4 pt-5 pb-2 sm:px-8">
+            <h1 className="text-center text-[24px] font-semibold text-[#18181B]">
+              Halo
+            </h1>
+            <p className="mt-1 text-center text-[15px] text-[#71717A]">
+              Apa yang bisa saya bantu hari ini?
+            </p>
+
+            {messages.length === 0 && !streaming && (
+              <div className="mt-5 flex w-full flex-wrap justify-center gap-2">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => submit(s)}
+                    className="rounded-full border border-[#E7E5E4] bg-white px-3.5 py-1.5 text-xs text-[#71717A] transition hover:border-[#18181B] hover:text-[#18181B] active:scale-95"
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
             )}
 
-            {messages.map((m, i) =>
-              m.role === "user" ? (
-                <div key={i} className="lab-anim-up flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-sm leading-relaxed text-paper">
-                    {m.content}
+            <div className="mt-4 flex w-full flex-col gap-[14px] pb-2">
+              {messages.map((m, i) =>
+                m.role === "user" ? (
+                  <div key={i} className="flex justify-end">
+                    <div className="max-w-[75%] rounded-[14px] bg-[#18181B] p-[14px] text-[13px] leading-relaxed whitespace-pre-wrap text-white">
+                      {m.content}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div key={i} className="lab-anim-up flex gap-3">
-                  <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-mono text-[10px] font-bold text-gold-ink">
-                    AI
+                ) : (
+                  <div key={i} className="flex items-start gap-[10px]">
+                    <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#18181B]" />
+                    <div className="min-w-0 flex-1 rounded-[14px] border border-[#E7E5E4] bg-white p-[14px] text-[13px] text-[#18181B]">
+                      {m.reasoning ? (
+                        <ThinkingBlock
+                          reasoning={m.reasoning}
+                          active={
+                            streaming && i === messages.length - 1 && !m.content
+                          }
+                        />
+                      ) : null}
+                      {m.content ? (
+                        <AssistantContent content={m.content} />
+                      ) : null}
+                      {!streaming || i !== messages.length - 1 ? (
+                        <FollowUpButtons
+                          questions={parseFollowUps(m.content)}
+                          onPick={(q) => submit(q)}
+                        />
+                      ) : null}
+                      {streaming &&
+                        i === messages.length - 1 &&
+                        m.content !== "" && (
+                          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-[#18181B] align-text-bottom" />
+                        )}
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1 border-l-2 border-gold/40 pl-3 text-sm text-ink">
-                    {m.reasoning ? (
-                      <ThinkingBlock
-                        reasoning={m.reasoning}
-                        active={
-                          streaming && i === messages.length - 1 && !m.content
-                        }
-                      />
-                    ) : null}
-                    {m.content ? (
-                      <AssistantContent content={m.content} />
-                    ) : null}
-                    {streaming &&
-                      i === messages.length - 1 &&
-                      m.content !== "" && (
-                        <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gold align-text-bottom" />
+                )
+              )}
+
+              {(mode === "agent" || research) &&
+                (trace.length > 0 || turnSummary) && (
+                  <div className="overflow-hidden rounded-[14px] border border-[#E7E5E4] bg-white">
+                    <details open={streaming}>
+                      <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 font-mono text-[11px] text-[#71717A] hover:text-[#18181B]">
+                        <Bot className="h-3.5 w-3.5 text-[#18181B]" />
+                        <span className="flex-1">
+                          {research ? "research" : "agent"} trace
+                          {turnSummary
+                            ? ` — ${turnSummary}`
+                            : streaming
+                              ? " — berjalan…"
+                              : ""}
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </summary>
+                      {research && (
+                        <ResearchPhases trace={trace} done={!streaming} />
                       )}
+                      <div className="max-h-64 space-y-1 overflow-y-auto border-t border-[#E7E5E4] px-3 py-2">
+                        {trace.map((ev, ti) => (
+                          <TraceRow key={ti} ev={ev} />
+                        ))}
+                      </div>
+                    </details>
                   </div>
+                )}
+
+              {streaming && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#A1A1AA]">
+                    Nova mengetik
+                  </span>
+                  {[0, 1, 2].map((d) => (
+                    <span
+                      key={d}
+                      className="nova-typing-dot h-1.5 w-1.5 rounded-full bg-[#D6D3D1]"
+                      style={{ animationDelay: `${d * 0.25}s` }}
+                    />
+                  ))}
                 </div>
-              )
-            )}
-            <div ref={bottomRef} />
+              )}
+
+              {error && (
+                <div className="flex items-center gap-2 rounded-[14px] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <CircleAlert className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1">{error}</span>
+                  <button
+                    onClick={() => setError(null)}
+                    className="font-mono text-[11px] underline underline-offset-2"
+                  >
+                    tutup
+                  </button>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
           </div>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-            <div className="lab-anim-in mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              <CircleAlert className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1">{error}</span>
+        {/* Input */}
+        <div className="px-4 pt-2 pb-6 sm:px-8">
+          <div className="mx-auto w-full max-w-[960px]">
+            <div className="flex items-center gap-[10px] rounded-[20px] border border-[#E7E5E4] bg-white py-2 pr-2 pl-[14px] shadow-[0px_6px_24px_rgba(0,0,0,0.08)] transition focus-within:border-[#A1A1AA]">
               <button
-                onClick={() => setError(null)}
-                className="font-mono text-[11px] underline underline-offset-2"
+                type="button"
+                disabled
+                title="Lampiran segera hadir — belum didukung backend"
+                className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg text-[#A1A1AA] opacity-60"
               >
-                tutup
+                <Paperclip className="h-4 w-4" />
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* Input dock */}
-        <div
-          className="border-t border-line bg-card/85 backdrop-blur"
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-        >
-          <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
-            <div className="flex items-end gap-2 rounded-2xl border border-line-strong bg-card p-2 shadow-sm transition focus-within:border-gold">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -1095,36 +1926,92 @@ export default function ChatPage() {
                 }}
                 onKeyDown={onKeyDown}
                 rows={1}
-                placeholder="Tanya apa aja ke lab…"
-                className="max-h-[180px] flex-1 resize-none bg-transparent px-2 py-1.5 text-base text-ink placeholder:text-faint focus:outline-none sm:text-sm"
+                placeholder="Tanyakan apa saja pada Nova..."
+                className="max-h-[180px] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-[#18181B] placeholder:text-[#A1A1AA] focus:outline-none"
               />
+              <button
+                type="button"
+                disabled
+                title="Dikte suara belum didukung di browser ini"
+                className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg text-[#A1A1AA] opacity-60"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
               {streaming ? (
                 <button
                   onClick={stop}
                   title="Stop"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ink text-paper transition hover:bg-black active:scale-90"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#18181B] text-white transition hover:bg-[#18181B]/85 active:scale-90"
                 >
                   <Square className="h-3.5 w-3.5 fill-current" />
                 </button>
               ) : (
                 <button
-                  onClick={() => send(input)}
+                  onClick={() => submit(input)}
                   disabled={!input.trim()}
                   title="Kirim (Enter)"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold text-ink transition hover:bg-gold active:scale-90 disabled:cursor-not-allowed disabled:bg-line-strong"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#18181B] text-white transition hover:bg-[#18181B]/85 active:scale-90 disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   <ArrowUp className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <p className="mt-1.5 hidden items-center justify-center gap-1.5 px-1 text-center font-mono text-[10px] text-faint sm:flex">
-              enter kirim · shift+enter baris baru ·
-              <MessageSquare className="h-3 w-3" />
-              riwayat: database lab
+            <p className="mt-2 hidden items-center justify-center gap-1.5 text-center font-mono text-[10px] text-[#A1A1AA] sm:flex">
+              enter kirim · shift+enter baris baru
+              {(mode === "agent" || research) && (
+                <span className="inline-flex items-center gap-1 text-[#71717A]">
+                  · <Bot className="h-3 w-3" />
+                  {research ? "research" : "agent"}: {enabledTools.length} tools
+                </span>
+              )}
+            </p>
+            <p className="mt-1 text-center text-[11px] text-[#A1A1AA]">
+              Nova dapat membuat kesalahan. Periksa informasi penting.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Modal approval run_shell (mode Agent) */}
+      {approval && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[#E7E5E4] bg-white p-5 shadow-2xl">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F5F4F3] text-[#18181B]">
+                <Wrench className="h-4 w-4" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-[#18181B]">
+                  Agent minta eksekusi shell
+                </h3>
+                <p className="font-mono text-[11px] text-[#A1A1AA]">
+                  {approval.name} · PROJECT_ROOT · auto-tolak 120 dtk
+                </p>
+              </div>
+            </div>
+            <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-[#E7E5E4] bg-[#FAFAF9] p-3 font-mono text-xs whitespace-pre-wrap break-words text-[#18181B]">
+              {approval.command || "(perintah kosong)"}
+            </pre>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => answerApproval(approval.call_id, false)}
+                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] border border-red-200 text-sm font-medium text-red-700 transition hover:bg-red-50 active:scale-[0.98]"
+              >
+                <X className="h-4 w-4" /> Tolak
+              </button>
+              <button
+                type="button"
+                onClick={() => answerApproval(approval.call_id, true)}
+                disabled={!approval.command?.trim()}
+                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-[#18181B] text-sm font-medium text-white transition hover:bg-[#18181B]/85 active:scale-[0.98] disabled:opacity-40"
+              >
+                <Check className="h-4 w-4" /> Setujui & jalankan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

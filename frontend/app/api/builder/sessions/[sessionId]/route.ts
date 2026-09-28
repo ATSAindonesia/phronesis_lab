@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ interface Params {
 }
 
 export async function GET(_request: Request, { params }: Params) {
+  const denied = await requireSession();
+  if (denied) return denied;
   const { sessionId } = await params;
   try {
     const res = await fetch(

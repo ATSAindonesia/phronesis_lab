@@ -99,6 +99,10 @@ type Agent struct {
 	tools   []Tool
 	maxIter int
 	approve ApprovalFunc
+	// RequireResearch: bila true (research mode), jawaban langsung tanpa
+	// tool riset DITOLAK — loop menyuntik nudge dan memaksa model memakai
+	// web_search/fetch_url sebelum boleh menjawab.
+	RequireResearch bool
 }
 
 func NewAgent(tools []Tool, approve ApprovalFunc, maxIter int) *Agent {
@@ -133,6 +137,8 @@ func (a *Agent) Run(ctx context.Context, emit Emit, model, system string, histor
 		msgs = append(msgs, Message{Role: "system", Content: systemPrompt})
 	}
 	msgs = append(msgs, history...)
+	researched := false // true setelah web_search/fetch_url dieksekusi
+	nudges := 0
 
 	for i := 1; i <= a.maxIter; i++ {
 		iters = i
@@ -148,6 +154,15 @@ func (a *Agent) Run(ctx context.Context, emit Emit, model, system string, histor
 		}
 
 		if len(resp.ToolCalls) == 0 {
+			// Guard keaktifan: research mode tanpa satu pun tool riset =
+			// jawaban malas — tolak, nudge, dan paksa iterasi berikutnya
+			// memakai tool. Beri maksimal 2 nudge agar tidak infinite.
+			if a.RequireResearch && !researched && nudges < maxResearchNudges && i < a.maxIter {
+				nudges++
+				emit(map[string]interface{}{"type": "trace", "kind": "nudge", "text": "jawaban langsung tanpa riset ditolak — memaksa web_search"})
+				msgs = append(msgs, Message{Role: "user", Content: researchNudgeMessage})
+				continue
+			}
 			final = resp.Content
 			emit(map[string]interface{}{"type": "trace", "kind": "done", "iterations": i, "tools_used": toolsUsed})
 			return final, iters, toolsUsed, nil
@@ -155,6 +170,9 @@ func (a *Agent) Run(ctx context.Context, emit Emit, model, system string, histor
 
 		for _, tc := range resp.ToolCalls {
 			toolsUsed++
+			if tc.Name == "web_search" || tc.Name == "fetch_url" {
+				researched = true
+			}
 			emit(map[string]interface{}{
 				"type": "trace", "kind": "tool_call",
 				"call_id": tc.ID, "name": tc.Name, "arguments": tc.ArgsJSON,
