@@ -5,12 +5,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"lab/internal/auth"
+	"lab/internal/agent"
+	"lab/internal/analytics"
 	"lab/internal/builder"
 	"lab/internal/chat"
 	"lab/internal/commands"
+	"lab/internal/console"
 	"lab/internal/experiments"
 	"lab/internal/files"
 	"lab/internal/shared/config"
@@ -19,6 +24,12 @@ import (
 )
 
 func main() {
+	// Daemon di bawah systemd berjalan sebagai session leader tanpa
+	// controlling terminal. Operasi PTY console (setsid + TIOCSCTTY di
+	// child) memicu SIGHUP palsu ke proses ini -> mati diam-diam tiap
+	// buka terminal. Abaikan: lifecycle diatur systemd via SIGTERM.
+	signal.Ignore(syscall.SIGHUP)
+
 	cfg := config.LoadConfig()
 
 	db, err := database.Connect(cfg)
@@ -36,7 +47,7 @@ func main() {
 	experimentsHandler := experiments.NewHandler()
 
 	mux := http.NewServeMux()
-	authHandler.RegisterRoutes(mux)
+	authHandler.RegisterRoutes(mux, authHandler.Middleware)
 	experimentsHandler.RegisterRoutes(mux)
 
 	// Self-hosted OpenComputer-compatible builder API (lab UI/UX experiment).
@@ -56,6 +67,20 @@ func main() {
 	// Command Sets (/lab/commands): CRUD command bash per service -> judul -> command.
 	commandsHandler := commands.NewHandler(db)
 	commandsHandler.RegisterRoutes(mux, authHandler.Middleware)
+
+	// Analytics Server (/lab/analytics-server): snapshot + stream SSE
+	// kondisi server realtime (CPU, RAM, disk, load, uptime).
+	analyticsHandler := analytics.NewHandler()
+	analyticsHandler.RegisterRoutes(mux)
+
+	// Console (/lab/console): terminal lokal, maks 5 sesi PTY via SSE + POST.
+	consoleHandler := console.NewHandler()
+	consoleHandler.RegisterRoutes(mux)
+
+	// Chat Agent Playground (/lab/chat mode Agent): loop LLM<->tool via SSE
+	// + approval manusia untuk run_shell.
+	agentHandler := agent.NewHandler()
+	agentHandler.RegisterRoutes(mux)
 
 	// Contoh endpoint terproteksi
 	mux.Handle("GET /api/me", authHandler.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
