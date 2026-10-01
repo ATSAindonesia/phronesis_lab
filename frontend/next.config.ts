@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     // buat experiment ui-ux).
     return [
       { source: "/lab/builder", destination: "/lab/chat", permanent: false },
+      { source: "/lab/analytics", destination: "/lab/analytics-server", permanent: false },
     ];
   },
   async rewrites() {
