@@ -3,6 +3,7 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import Header from "./header";
+import SessionTabWatcher from "@/components/session-tab-watcher";
 
 export default function LabShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -11,26 +12,50 @@ export default function LabShell({ children }: { children: React.ReactNode }) {
   const isFilesPage = pathname === "/lab/files" || pathname?.startsWith("/lab/files/");
   const isCommandsPage = pathname === "/lab/commands" || pathname?.startsWith("/lab/commands/");
 
+  const isOverviewPage = pathname === "/lab";
+
+  if (isOverviewPage) {
+    // Overview owns its own grid + index strips — no shared header,
+    // block scroll container (flex-centering would clip the top
+    // when content overflows). pt clears the fixed mobile hamburger.
+    return (
+      <>
+        <SessionTabWatcher />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#FDFBEF]">
+          <main className="flex-1 overflow-y-auto pt-14 md:pt-0">
+            {children}
+          </main>
+        </div>
+      </>
+    );
+  }
+
   if (isUiUxPage || isChatPage || isFilesPage || isCommandsPage) {
     // Fullscreen pages (UI/UX experiment + chat + files + command sets):
     // The header is integrated directly as part of the page itself,
     // maximizing screen space.
     return (
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0 h-full w-full">
-        {children}
-      </div>
+      <>
+        <SessionTabWatcher />
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0 h-full w-full">
+          {children}
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden min-w-0 bg-paper">
-      {/* Default Header for regular lab pages */}
-      <Header title="Research & Development" subtitle="Lab Phronesis" />
+    <>
+      <SessionTabWatcher />
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0 bg-paper">
+        {/* Default Header for regular lab pages */}
+        <Header title="Research & Development" subtitle="Lab Phronesis" />
 
-      {/* Content Container */}
-      <main className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
-        {children}
-      </main>
-    </div>
+        {/* Content Container */}
+        <main className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
+          {children}
+        </main>
+      </div>
+    </>
   );
 }

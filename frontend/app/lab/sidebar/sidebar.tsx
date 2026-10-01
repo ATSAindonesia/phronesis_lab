@@ -17,6 +17,8 @@ import {
   Zap,
   Menu,
   X,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,12 +35,18 @@ const navItems: NavItem[] = [
   { name: "Chat", href: "/lab/chat", icon: MessageSquare },
   { name: "file-system scanner", href: "/lab/files", icon: FolderTree },
   { name: "Command Sets", href: "/lab/commands", icon: SquareTerminal },
-  { name: "Analytics", href: "/lab/analytics", icon: LineChart },
+  { name: "Analytics Server", href: "/lab/analytics-server", icon: LineChart },
   { name: "Console", href: "/lab/console", icon: Terminal },
   { name: "Settings", href: "/lab/settings", icon: Settings },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  onCollapse,
+}: {
+  onNavigate?: () => void;
+  onCollapse?: () => void;
+}) {
   const pathname = usePathname();
   const [activeItem, setActiveItem] = useState("/lab");
 
@@ -49,7 +57,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 shadow-md shadow-blue-500/20 text-white">
           <FlaskConical className="h-5 w-5" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             Lab Phronesis
           </div>
@@ -57,6 +65,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             Research & Intelligence
           </div>
         </div>
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Sembunyikan sidebar"
+            aria-label="Sembunyikan sidebar"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Navigation List */}
@@ -139,21 +158,35 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const isChatPage = pathname === "/lab/chat";
+  // Di endpoint chat sidebar disembunyikan default — user bisa show/hide manual.
+  // Init dari pathname biar gak flash tampil dulu pas langsung buka /lab/chat.
+  const [navHidden, setNavHidden] = useState(isChatPage);
+
+  // Tiap pindah halaman: masuk chat → auto-hidden, keluar chat → tampil lagi.
+  // Toggle manual di antara pindah halaman tetap dihormati (cuma di-set ulang
+  // pas pathname berubah).
+  useEffect(() => {
+    setNavHidden(pathname === "/lab/chat");
+  }, [pathname]);
 
   // Tutup drawer tiap pindah halaman.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  // Escape buat nutup drawer.
+  // Escape buat nutup drawer + balikin sidebar chat yang di-show manual.
   useEffect(() => {
-    if (!open) return;
+    if (!open && !isChatPage) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        if (isChatPage) setNavHidden(true);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, isChatPage]);
 
   if (pathname === "/lab/experiments/ui-ux") {
     return null;
@@ -161,9 +194,27 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar — tampilan lama, gak berubah */}
-      <aside className="relative hidden md:flex h-screen w-64 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all">
-        <SidebarContent />
+      {/* Tombol show khusus halaman chat (desktop) — sidebar hidden default */}
+      {isChatPage && navHidden && (
+        <button
+          type="button"
+          onClick={() => setNavHidden(false)}
+          title="Tampilkan sidebar"
+          aria-label="Tampilkan sidebar"
+          className="fixed left-3 top-3 z-40 hidden h-10 w-10 items-center justify-center rounded-xl border border-zinc-200/80 bg-white/90 text-zinc-600 shadow-sm backdrop-blur-md transition-colors hover:bg-zinc-100 dark:border-zinc-800/80 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-800 md:flex"
+        >
+          <PanelLeftOpen className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* Desktop sidebar — di /lab/chat disembunyikan kalau navHidden */}
+      <aside
+        className={cn(
+          "relative h-screen w-64 flex-col border-r border-zinc-200/80 bg-white/90 dark:border-zinc-800/80 dark:bg-zinc-950/90 backdrop-blur-xl shrink-0 transition-all",
+          isChatPage && navHidden ? "hidden" : "hidden md:flex"
+        )}
+      >
+        <SidebarContent onCollapse={isChatPage ? () => setNavHidden(true) : undefined} />
       </aside>
 
       {/* Mobile: hamburger + drawer */}
