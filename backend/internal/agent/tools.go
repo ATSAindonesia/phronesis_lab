@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -240,27 +241,47 @@ func ResearchTools(rc *ResearchContext) []Tool {
 				if strings.TrimSpace(query) == "" {
 					return "", fmt.Errorf("web_search: query is required")
 				}
-				if rc.searches >= maxSearches {
-					return "", fmt.Errorf("web_search: batas pencarian tercapai (%d) — lanjutkan dengan sumber yang ada", maxSearches)
+				if rc.searches >= effectiveMaxSearches() {
+					return "", fmt.Errorf("web_search: batas pencarian tercapai (%d) — lanjutkan dengan sumber yang ada", effectiveMaxSearches())
 				}
 				n := defaultMaxResult
 				if f, ok := args["max_results"].(float64); ok && f >= 1 && f <= 10 {
 					n = int(f)
 				}
-				tctx, cancel := context.WithTimeout(ctx, toolTimeoutSecs*time.Second)
+				tctx, cancel := context.WithTimeout(ctx, time.Duration(effectiveToolTimeout())*time.Second)
 				defer cancel()
 				results, err := rc.provider.Search(tctx, strings.TrimSpace(query), n)
 				if err != nil {
 					return "", fmt.Errorf("web_search: %v", err)
 				}
 				rc.searches++
+				rc.history = append(rc.history, strings.TrimSpace(query))
 				if len(results) == 0 {
 					return "Tidak ada hasil untuk query ini. Coba query berbeda.", nil
 				}
 				var sb strings.Builder
-				for i, r := range results {
-					fmt.Fprintf(&sb, "%d. %s\n   %s\n   %s\n", i+1,
-						truncateRunes(r.Title, 160), r.URL, truncateRunes(r.Snippet, 300))
+				shown := 0
+				dups := 0
+				for _, r := range results {
+					norm := normalizeURL(r.URL)
+					if rc.seenURLs[norm] {
+						dups++
+						continue
+					}
+					rc.markSeen(r.URL)
+					shown++
+					domain := r.URL
+					if u, err := url.Parse(r.URL); err == nil && u.Host != "" {
+						domain = u.Host
+					}
+					fmt.Fprintf(&sb, "%d. %s\n   %s | %s\n   %s\n", shown,
+						truncateRunes(r.Title, 160), domain, r.URL, truncateRunes(r.Snippet, 400))
+				}
+				if shown == 0 {
+					return fmt.Sprintf("Semua %d hasil sudah ditampilkan sebelumnya (duplikat). Coba query berbeda.", dups), nil
+				}
+				if dups > 0 {
+					fmt.Fprintf(&sb, "\n[%d duplikat disembunyikan — coba query berbeda untuk hasil baru]", dups)
 				}
 				return truncateRunes(sb.String(), maxToolResultRunes), nil
 			},
@@ -280,10 +301,14 @@ func ResearchTools(rc *ResearchContext) []Tool {
 				if strings.TrimSpace(rawURL) == "" {
 					return "", fmt.Errorf("fetch_url: url is required")
 				}
-				if len(rc.sources) >= maxSources {
-					return "", fmt.Errorf("fetch_url: batas sumber tercapai (%d) — sintesis dari yang sudah dibaca", maxSources)
+				// Dedup: URL yang sudah dibaca tidak makan kuota lagi.
+				if prev := rc.seenFetch(rawURL); prev != nil {
+					return fmt.Sprintf("URL ini sudah dibaca sebagai Sumber [%d]: %s — pakai marker [%d] itu, tidak perlu fetch ulang.", prev.N, prev.URL, prev.N), nil
 				}
-				tctx, cancel := context.WithTimeout(ctx, toolTimeoutSecs*time.Second)
+				if len(rc.sources) >= effectiveMaxSources() {
+					return "", fmt.Errorf("fetch_url: batas sumber tercapai (%d) — sintesis dari yang sudah dibaca", effectiveMaxSources())
+				}
+				tctx, cancel := context.WithTimeout(ctx, time.Duration(effectiveToolTimeout())*time.Second)
 				defer cancel()
 				page, err := rc.fetcher.Fetch(tctx, strings.TrimSpace(rawURL))
 				if err != nil {
@@ -291,7 +316,21 @@ func ResearchTools(rc *ResearchContext) []Tool {
 				}
 				n := len(rc.sources) + 1
 				rc.sources = append(rc.sources, Source{N: n, Title: page.Title, URL: page.URL})
-				return fmt.Sprintf("Sumber [%d]: %s\n%s", n, page.URL, page.Text), nil
+				rc.markSeen(page.URL)
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "Sumber [%d]: %s", n, page.URL)
+				if page.WordCount > 0 {
+					fmt.Fprintf(&sb, " (%d kata)", page.WordCount)
+				}
+				sb.WriteString("\n")
+				if page.Published != "" {
+					fmt.Fprintf(&sb, "Diterbitkan: %s\n", truncateRunes(page.Published, 120))
+				}
+				if page.Description != "" {
+					fmt.Fprintf(&sb, "Ringkasan meta: %s\n", truncateRunes(page.Description, 500))
+				}
+				sb.WriteString(page.Text)
+				return truncateRunes(sb.String(), maxFetchText+2000), nil
 			},
 		},
 	}

@@ -106,8 +106,17 @@ func (h *Handler) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 	temp := 0.7
 	if req.Temperature != nil && *req.Temperature >= 0 && *req.Temperature <= 2 {
 		temp = *req.Temperature
+	} else if req.Research {
+		// Riset butuh kepatuhan instruksi (fan-out paralel, kuota,
+		// format follow-up) — suhu rendah lebih disiplin memanggil tool.
+		temp = 0.3
 	}
 	maxIter := 5
+	if req.Research {
+		// Riset Perplexity-style (fan-out + baca banyak sumber) butuh
+		// budget iterasi lebih besar dari agent biasa.
+		maxIter = 8
+	}
 	if req.MaxIterations != nil && *req.MaxIterations >= 1 && *req.MaxIterations <= 10 {
 		maxIter = *req.MaxIterations
 	}
@@ -226,6 +235,7 @@ func (h *Handler) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	agent := NewAgent(enabled, approve, maxIter)
+	agent.RequireResearch = req.Research
 	final, iters, toolsUsed, err := agent.Run(r.Context(), emit, strings.TrimSpace(req.Model), system, history, temp)
 	close(done)
 	if err != nil {
