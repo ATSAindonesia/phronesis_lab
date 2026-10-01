@@ -1,6 +1,7 @@
 import React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { isSessionAlive } from "@/lib/session";
 import Sidebar from "./sidebar";
 import LabShell from "./lab-shell";
 
@@ -12,7 +13,9 @@ export default async function LabLayout({
   const cookieStore = await cookies();
   const session = cookieStore.get("session");
 
-  if (!session?.value) {
+  // Defense-in-depth: middleware adalah gate utama, tapi layout juga menolak
+  // cookie yang hilang ATAU expired (dulu hanya cek keberadaan).
+  if (!isSessionAlive(session?.value)) {
     redirect("/login");
   }
 

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/require-session";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8081";
 
 export async function GET(request: NextRequest) {
+  const denied = await requireSession();
+  if (denied) return denied;
   const searchParams = request.nextUrl.searchParams;
   const path = searchParams.get("path") ?? "";
 

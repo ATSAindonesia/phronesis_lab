@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -15,6 +16,8 @@ function upstream(path: string) {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireSession();
+  if (denied) return denied;
   let body: { prompt?: string };
   try {
     body = await request.json();

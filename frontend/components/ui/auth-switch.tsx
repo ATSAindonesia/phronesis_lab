@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Mail,
   Lock,
-  User,
   Eye,
   EyeOff,
   ArrowRight,
@@ -16,18 +15,19 @@ import {
 import { cn } from "@/lib/utils";
 
 export interface AuthSwitchProps {
+  /** Deprecated (single-user mode): hanya Sign In yang tersedia. */
   defaultMode?: "signin" | "signup";
   onSuccessRedirect?: string;
   className?: string;
 }
 
+// Single-user mode: registrasi publik dikunci di backend (403) dan UI
+// signup dihapus total. Komponen ini hanya menampilkan form Sign In.
 export const AuthSwitch = ({
-  defaultMode = "signin",
   onSuccessRedirect = "/lab",
   className,
 }: AuthSwitchProps) => {
   const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup">(defaultMode);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,23 +36,10 @@ export const AuthSwitch = ({
   // Sign In Fields
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
-
-  // Sign Up Fields
-  const [name, setName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const resetMessages = () => {
     setError(null);
     setSuccessMsg(null);
-  };
-
-  const handleModeSwitch = (newMode: "signin" | "signup") => {
-    resetMessages();
-    setMode(newMode);
   };
 
   const handleSignInSubmit = async (e: React.FormEvent) => {
@@ -88,67 +75,6 @@ export const AuthSwitch = ({
     }
   };
 
-  const handleSignUpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-
-    if (!name.trim()) {
-      setError("Please enter your full name");
-      return;
-    }
-
-    if (!signupEmail.trim()) {
-      setError("Please enter your email address");
-      return;
-    }
-
-    if (signupPassword.length < 6) {
-      setError("Password must be at least 6 characters long");
-      return;
-    }
-
-    if (signupPassword !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    if (!agreeTerms) {
-      setError("Please agree to the Terms of Service & Privacy Policy");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: signupEmail.trim(),
-          password: signupPassword,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setError(data.error ?? "Registration failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      setSuccessMsg("Account created successfully! Redirecting...");
-      setTimeout(() => {
-        router.push(onSuccessRedirect);
-        router.refresh();
-      }, 600);
-    } catch {
-      setError("Network error. Please check your connection.");
-      setLoading(false);
-    }
-  };
-
   return (
     <div
       className={cn(
@@ -166,7 +92,7 @@ export const AuthSwitch = ({
         aria-hidden="true"
       />
 
-      {/* Header with Unsplash Avatar & Pill Switch */}
+      {/* Header with Unsplash Avatar */}
       <div className="relative z-10 flex flex-col items-center text-center">
         <div className="flex items-center gap-2 mb-4">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 p-0.5 shadow-lg shadow-blue-500/30">
@@ -192,43 +118,11 @@ export const AuthSwitch = ({
         </div>
 
         <h2 className="text-2xl font-bold tracking-tight text-white drop-shadow-sm">
-          {mode === "signin" ? "Welcome back" : "Create an account"}
+          Welcome back
         </h2>
         <p className="mt-1 text-sm text-white/70">
-          {mode === "signin"
-            ? "Enter your credentials to access your workspace"
-            : "Join thousands of builders shipping faster"}
+          Enter your credentials to access your workspace
         </p>
-
-        {/* Animated Toggle Pill */}
-        <div className="relative mt-6 flex w-full max-w-xs rounded-full bg-black/30 p-1 backdrop-blur-md border border-white/10">
-          <div
-            className={cn(
-              "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full bg-white/20 shadow-sm backdrop-blur-lg transition-transform duration-300 ease-out",
-              mode === "signin" ? "translate-x-0" : "translate-x-full"
-            )}
-          />
-          <button
-            type="button"
-            onClick={() => handleModeSwitch("signin")}
-            className={cn(
-              "relative z-10 w-1/2 py-2 text-xs font-semibold tracking-wide transition-colors duration-200",
-              mode === "signin" ? "text-white" : "text-white/60 hover:text-white"
-            )}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeSwitch("signup")}
-            className={cn(
-              "relative z-10 w-1/2 py-2 text-xs font-semibold tracking-wide transition-colors duration-200",
-              mode === "signup" ? "text-white" : "text-white/60 hover:text-white"
-            )}
-          >
-            Sign Up
-          </button>
-        </div>
       </div>
 
       {/* Social Buttons */}
@@ -293,226 +187,81 @@ export const AuthSwitch = ({
         </div>
       )}
 
-      {/* Forms Container with Transition */}
+      {/* Sign In Form */}
       <div className="relative z-10">
-        {mode === "signin" ? (
-          /* Sign In Form */
-          <form onSubmit={handleSignInSubmit} className="flex flex-col gap-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-white/80">
-                Email Address
-              </label>
-              <div className="relative flex items-center">
-                <Mail className="pointer-events-none absolute left-3.5 h-4 w-4 text-white/50" />
-                <input
-                  type="email"
-                  required
-                  placeholder="name@example.com"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-white/15 bg-white/5 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="text-xs font-medium text-white/80">
-                  Password
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setError("Password reset link will be sent to your email")}
-                  className="text-xs text-blue-300 hover:text-blue-200 transition-colors"
-                >
-                  Forgot password?
-                </button>
-              </div>
-              <div className="relative flex items-center">
-                <Lock className="pointer-events-none absolute left-3.5 h-4 w-4 text-white/50" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-white/15 bg-white/5 pl-10 pr-10 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 text-white/50 hover:text-white transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
+        <form onSubmit={handleSignInSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-white/80">
+              Email Address
+            </label>
+            <div className="relative flex items-center">
+              <Mail className="pointer-events-none absolute left-3.5 h-4 w-4 text-white/50" />
               <input
-                id="rememberMe"
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-400/30"
+                type="email"
+                required
+                placeholder="name@example.com"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="h-11 w-full rounded-xl border border-white/15 bg-white/5 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
               />
-              <label htmlFor="rememberMe" className="text-xs text-white/70">
-                Remember me for 30 days
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs font-medium text-white/80">
+                Password
               </label>
+              <button
+                type="button"
+                onClick={() => setError("Password reset link will be sent to your email")}
+                className="text-xs text-blue-300 hover:text-blue-200 transition-colors"
+              >
+                Forgot password?
+              </button>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 font-medium text-sm text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-600 hover:to-indigo-700 hover:shadow-blue-500/35 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing In...
-                </>
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
-        ) : (
-          /* Sign Up Form */
-          <form onSubmit={handleSignUpSubmit} className="flex flex-col gap-3.5">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-white/80">
-                Full Name
-              </label>
-              <div className="relative flex items-center">
-                <User className="pointer-events-none absolute left-3.5 h-4 w-4 text-white/50" />
-                <input
-                  type="text"
-                  required
-                  placeholder="Jane Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-white/15 bg-white/5 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-white/80">
-                Email Address
-              </label>
-              <div className="relative flex items-center">
-                <Mail className="pointer-events-none absolute left-3.5 h-4 w-4 text-white/50" />
-                <input
-                  type="email"
-                  required
-                  placeholder="name@example.com"
-                  value={signupEmail}
-                  onChange={(e) => setSignupEmail(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-white/15 bg-white/5 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-white/80">
-                  Password
-                </label>
-                <div className="relative flex items-center">
-                  <Lock className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-white/50" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    placeholder="••••••••"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-white/15 bg-white/5 pl-8 pr-3 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-white/80">
-                  Confirm
-                </label>
-                <div className="relative flex items-center">
-                  <Lock className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-white/50" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-white/15 bg-white/5 pl-8 pr-3 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 mt-1">
+            <div className="relative flex items-center">
+              <Lock className="pointer-events-none absolute left-3.5 h-4 w-4 text-white/50" />
               <input
-                id="agreeTerms"
-                type="checkbox"
-                checked={agreeTerms}
-                onChange={(e) => setAgreeTerms(e.target.checked)}
-                className="h-4 w-4 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-400/30"
+                type={showPassword ? "text" : "password"}
+                required
+                placeholder="••••••••"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="h-11 w-full rounded-xl border border-white/15 bg-white/5 pl-10 pr-10 text-sm text-white placeholder:text-white/40 focus:border-white/40 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400/40 transition-all"
               />
-              <label htmlFor="agreeTerms" className="text-xs text-white/70 leading-tight">
-                I agree to the{" "}
-                <span className="text-blue-300 hover:underline cursor-pointer">Terms</span> and{" "}
-                <span className="text-blue-300 hover:underline cursor-pointer">Privacy Policy</span>
-              </label>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 text-white/50 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 font-medium text-sm text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-600 hover:to-indigo-700 hover:shadow-blue-500/35 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating Account...
-                </>
-              ) : (
-                <>
-                  Create Account
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-      </div>
+          <p className="text-center text-[11px] text-white/50">
+            Sesi berlaku 12 jam. Setelah itu kamu akan diminta login lagi.
+          </p>
 
-      {/* Footer Switch Prompt */}
-      <div className="relative z-10 mt-6 text-center text-xs text-white/60">
-        {mode === "signin" ? (
-          <>
-            Don&apos;t have an account yet?{" "}
-            <button
-              type="button"
-              onClick={() => handleModeSwitch("signup")}
-              className="font-semibold text-blue-300 hover:text-blue-200 transition-colors"
-            >
-              Create an account
-            </button>
-          </>
-        ) : (
-          <>
-            Already have an account?{" "}
-            <button
-              type="button"
-              onClick={() => handleModeSwitch("signin")}
-              className="font-semibold text-blue-300 hover:text-blue-200 transition-colors"
-            >
-              Sign in
-            </button>
-          </>
-        )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 font-medium text-sm text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-600 hover:to-indigo-700 hover:shadow-blue-500/35 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Signing In...
+              </>
+            ) : (
+              <>
+                Sign In
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </button>
+        </form>
       </div>
     </div>
   );

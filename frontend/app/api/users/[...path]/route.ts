@@ -1,0 +1,53 @@
+import type { NextRequest } from "next/server";
+import { chatBackend } from "@/lib/chat-history";
+import { requireSession } from "@/lib/require-session";
+
+export const dynamic = "force-dynamic";
+
+type Ctx = { params: Promise<{ path: string[] }> };
+
+// Proxy catch-all ke backend Go: /api/users/<...> -> /v1/users/<...>
+// Cookie `session` (JWT) diteruskan sebagai Authorization: Bearer oleh helper,
+// pola sama dengan proxy commands & riwayat chat. Hanya sesi login yang bisa
+// memakai endpoint user CRUD (settings).
+async function forward(request: NextRequest, ctx: Ctx, method: string) {
+  const { path } = await ctx.params;
+  const target =
+    "/v1/users" + (path ?? []).map((seg) => "/" + encodeURIComponent(seg)).join("");
+
+  if (method === "GET" || method === "DELETE") {
+    return chatBackend(request, target, { method });
+  }
+
+  let body: unknown = {};
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+  return chatBackend(request, target, { method, body });
+}
+
+export async function GET(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
+  return forward(request, ctx, "GET");
+}
+
+export async function POST(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
+  return forward(request, ctx, "POST");
+}
+
+export async function PATCH(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
+  return forward(request, ctx, "PATCH");
+}
+
+export async function DELETE(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
+  return forward(request, ctx, "DELETE");
+}

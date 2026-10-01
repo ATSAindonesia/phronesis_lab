@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { chatBackend } from "@/lib/chat-history";
+import { requireSession } from "@/lib/require-session";
 
 export const dynamic = "force-dynamic";
 
@@ -27,17 +28,25 @@ async function forward(request: NextRequest, ctx: Ctx, method: string) {
 }
 
 export async function GET(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   return forward(request, ctx, "GET");
 }
 
 export async function POST(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   return forward(request, ctx, "POST");
 }
 
 export async function PATCH(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   return forward(request, ctx, "PATCH");
 }
 
 export async function DELETE(request: NextRequest, ctx: Ctx) {
+  const denied = await requireSession();
+  if (denied) return denied;
   return forward(request, ctx, "DELETE");
 }

@@ -45,7 +45,7 @@ func (s *Service) CreateUser(req CreateUserRequest) (*UserResponse, error) {
 		return nil, err
 	}
 
-	return &UserResponse{UUID: user.UUID, Name: user.Name, Email: user.Email}, nil
+	return &UserResponse{UUID: user.UUID, Name: user.Name, Email: user.Email, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt}, nil
 }
 
 // Login memverifikasi email & password, lalu mengembalikan token JWT.
@@ -67,6 +67,6 @@ func (s *Service) Login(req LoginRequest) (*LoginResponse, error) {
 
 	return &LoginResponse{
 		Token: token,
-		User:  UserResponse{UUID: user.UUID, Name: user.Name, Email: user.Email},
+		User:  UserResponse{UUID: user.UUID, Name: user.Name, Email: user.Email, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt},
 	}, nil
 }
